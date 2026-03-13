@@ -5,8 +5,6 @@ import tempfile
 import threading
 import time
 from functools import wraps
-import glob
-from datetime import datetime
 
 import dotenv
 
@@ -77,39 +75,6 @@ class LocalWhisperProcessor:
         # 是否启用Kimi润色功能（默认关闭，通过快捷键动态控制）
         self.enable_kimi_polish = os.getenv("ENABLE_KIMI_POLISH", "false").lower() == "true"
         
-        # 创建音频存档目录
-        self.audio_archive_dir = "audio_archive"
-        self._ensure_archive_directory()
-
-    def _ensure_archive_directory(self):
-        """确保音频存档目录存在"""
-        if not os.path.exists(self.audio_archive_dir):
-            os.makedirs(self.audio_archive_dir)
-            logger.info(f"创建音频存档目录: {self.audio_archive_dir}")
-
-    def _save_audio_to_archive(self, audio_buffer):
-        """将音频数据保存到存档目录，并管理文件数量"""
-        # 生成带时间戳的文件名
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        archive_filename = f"recording_{timestamp}.wav"
-        archive_path = os.path.join(self.audio_archive_dir, archive_filename)
-        
-        try:
-            # 重置缓冲区位置到开始
-            audio_buffer.seek(0)
-            with open(archive_path, 'wb') as f:
-                f.write(audio_buffer.read())
-            
-            logger.info(f"音频文件已保存到存档: {archive_path}")
-            
-            # 音频文件已存档，默认保留所有文件
-            
-            return archive_path
-        except Exception as e:
-            logger.error(f"保存音频文件到存档失败: {e}")
-            return None
-
-
     def _save_audio_to_temp_file(self, audio_buffer):
         """将音频数据保存到临时WAV文件"""
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.wav')
@@ -210,7 +175,7 @@ class LocalWhisperProcessor:
             except Exception as e:
                 logger.warning(f"清理临时文件失败: {e}")
 
-    def process_audio(self, audio_buffer, mode="transcriptions", prompt=""):
+    def process_audio(self, audio_buffer, mode="transcriptions", prompt="", archive_path=None):
         """处理音频（转录或翻译）
         
         Args:
@@ -228,10 +193,7 @@ class LocalWhisperProcessor:
             start_time = time.time()
             
             logger.info(f"正在使用本地 whisper.cpp 处理音频... (模式: {mode})")
-            
-            # 首先保存音频到存档（保留原始录音）
-            archive_path = self._save_audio_to_archive(audio_buffer)
-            
+
             # 保存音频到临时文件用于处理
             wav_file = self._save_audio_to_temp_file(audio_buffer)
             

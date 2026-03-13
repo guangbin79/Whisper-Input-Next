@@ -25,6 +25,7 @@ def test_cache_functionality():
     
     # 检查audio_archive目录
     archive_dir = "audio_archive"
+    audio_dir = os.path.join(archive_dir, "audio")
     cache_file = os.path.join(archive_dir, "cache.json")
     
     if not os.path.exists(archive_dir):
@@ -34,7 +35,8 @@ def test_cache_functionality():
     print(f"📁 音频存档目录: {archive_dir}")
     
     # 列出音频文件
-    audio_files = [f for f in os.listdir(archive_dir) if f.endswith('.wav')]
+    search_dir = audio_dir if os.path.exists(audio_dir) else archive_dir
+    audio_files = [f for f in os.listdir(search_dir) if f.endswith('.wav')]
     print(f"🎵 发现音频文件: {len(audio_files)} 个")
     
     if not audio_files:
@@ -42,7 +44,7 @@ def test_cache_functionality():
         return False
     
     # 选择最新的音频文件
-    latest_audio = max([os.path.join(archive_dir, f) for f in audio_files], 
+    latest_audio = max([os.path.join(search_dir, f) for f in audio_files], 
                       key=os.path.getmtime)
     audio_filename = os.path.basename(latest_audio)
     print(f"🎯 使用最新音频: {audio_filename}")

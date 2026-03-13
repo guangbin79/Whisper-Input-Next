@@ -38,7 +38,7 @@ def test_openai_transcribe():
     )
     
     # 获取 audio_archive 中的音频文件
-    audio_archive_dir = "audio_archive"
+    audio_archive_dir = os.path.join("audio_archive", "audio")
     audio_files = glob.glob(os.path.join(audio_archive_dir, "*.wav"))
     
     if not audio_files:
@@ -86,7 +86,7 @@ def test_different_models():
     )
     
     # 获取音频文件
-    audio_files = glob.glob(os.path.join("audio_archive", "*.wav"))
+    audio_files = glob.glob(os.path.join("audio_archive", "audio", "*.wav"))
     if not audio_files:
         print("❌ 没有找到音频文件")
         return

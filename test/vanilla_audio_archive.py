@@ -4,7 +4,7 @@ client = OpenAI()
 
 import os
 import glob
-def get_latest_audio_file(audio_dir="audio_archive"):
+def get_latest_audio_file(audio_dir="audio_archive/audio"):
     """从指定目录获取最新的音频文件"""
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     audio_archive_path = os.path.join(project_root, audio_dir)

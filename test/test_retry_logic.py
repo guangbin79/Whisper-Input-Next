@@ -24,7 +24,7 @@ dotenv.load_dotenv()
 def test_failure_retry_logic():
     """测试失败重试逻辑"""
     
-    audio_path = "audio_archive/recording_20250727_024821.wav"
+    audio_path = "audio_archive/audio/recording_20250727_024821.wav"
     
     if not os.path.exists(audio_path):
         print(f"❌ 测试音频文件不存在: {audio_path}")
