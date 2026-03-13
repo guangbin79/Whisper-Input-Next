@@ -19,6 +19,7 @@ class KeyboardManager:
         self.is_recording = False  # toggle模式的录音状态
         self.last_key_time = 0  # 防止重复触发
         self.KEY_DEBOUNCE_TIME = 0.3  # 按键防抖时间（秒）
+        self.hotkey_latched = False  # 热键触发后，必须先松开再允许下一次触发
         self._original_clipboard = None  # 保存原始剪贴板内容
         
         
@@ -298,12 +299,16 @@ class KeyboardManager:
     def toggle_recording(self):
         """切换录音状态"""
         current_time = time.time()
+
+        if self.hotkey_latched:
+            return
         
         # 防抖处理
         if current_time - self.last_key_time < self.KEY_DEBOUNCE_TIME:
             return
         
         self.last_key_time = current_time
+        self.hotkey_latched = True
         
         if not self.is_recording:
             # 开始录音
@@ -320,12 +325,16 @@ class KeyboardManager:
     def toggle_kimi_recording(self):
         """切换本地 Whisper 录音状态"""
         current_time = time.time()
+
+        if self.hotkey_latched:
+            return
         
         # 防抖处理
         if current_time - self.last_key_time < self.KEY_DEBOUNCE_TIME:
             return
         
         self.last_key_time = current_time
+        self.hotkey_latched = True
         
         if not self.is_recording:
             # 开始录音
@@ -410,6 +419,9 @@ class KeyboardManager:
                 self.f_pressed = False
             elif is_translation_key:  # Ctrl键释放
                 self.ctrl_pressed = False
+
+            if not self.ctrl_pressed and not self.f_pressed and not self.i_pressed:
+                self.hotkey_latched = False
         except AttributeError:
             pass
     
@@ -431,7 +443,8 @@ class KeyboardManager:
         self.f_pressed = False
         self.i_pressed = False
         self.is_recording = False
-        self.last_key_time = 0
+        self.last_key_time = time.time()
+        self.hotkey_latched = True
         self.processing_text = None
         self.error_message = None
         self.warning_message = None
