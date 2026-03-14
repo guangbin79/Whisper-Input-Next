@@ -430,21 +430,8 @@ class VoiceAssistant:
             self.start_openai_recording()
             return
 
-        if self._streaming_thread and self._streaming_thread.is_alive():
-            self._force_reset_doubao_streaming(
-                "检测到残留的豆包流式线程，启动前先回收",
-                reset_keyboard=False,
-            )
-
-        # 启动流式录音
+        # 启动流式录音（recorder 内部会处理残留状态）
         error = self.audio_recorder.start_streaming_recording()
-        if error == "已经在录音中":
-            self._force_reset_doubao_streaming(
-                "检测到底层录音器残留在 recording 状态，自动重置后重试",
-                reset_keyboard=False,
-            )
-            error = self.audio_recorder.start_streaming_recording()
-
         if error:
             logger.error(f"启动流式录音失败: {error}")
             self.keyboard_manager.reset_state()
@@ -476,32 +463,6 @@ class VoiceAssistant:
             daemon=True,
         )
         self._streaming_thread.start()
-
-    def _force_reset_doubao_streaming(self, reason: str, reset_keyboard: bool = True):
-        """强制清理豆包流式会话，用于异常恢复。"""
-        logger.warning(f"♻️ 重置豆包流式会话: {reason}")
-        self.floating_preview.hide()
-        self.audio_recorder.reset_streaming_state(reason=reason)
-
-        if self.doubao_processor and self._streaming_loop and self._streaming_loop.is_running():
-            try:
-                future = asyncio.run_coroutine_threadsafe(
-                    self.doubao_processor.disconnect(),
-                    self._streaming_loop,
-                )
-                future.result(timeout=1.5)
-            except Exception as exc:
-                logger.debug(f"等待豆包连接断开时忽略异常: {exc}")
-
-        thread = self._streaming_thread
-        if thread and thread.is_alive() and thread is not threading.current_thread():
-            thread.join(timeout=1.0)
-
-        self._streaming_thread = None
-        self._current_streaming_archive_path = None
-
-        if reset_keyboard:
-            self.keyboard_manager.reset_state()
 
     async def _run_doubao_streaming(self):
         """运行豆包流式转录"""
