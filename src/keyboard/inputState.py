@@ -21,5 +21,5 @@ class InputState(Enum):
     
     @property
     def can_start_recording(self):
-        """检查是否可以开始新的录音"""
-        return not self.is_recording
+        """检查是否可以开始新的录音（只有 IDLE 状态才能开始）"""
+        return self == InputState.IDLE
