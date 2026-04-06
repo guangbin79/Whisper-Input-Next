@@ -38,7 +38,12 @@ fi
 if [ ! -f ".venv/pyvenv.cfg" ] || [ ! -f "venv/lib/python*/site-packages/openai" ]; then
   echo "📦 安装项目依赖..."
   source .venv/bin/activate
-  pip install -r requirements.txt
+  # Select requirements file based on platform
+  if [[ "$(uname)" == "Darwin" ]]; then
+    pip install -r requirements.txt
+  else
+    pip install -r requirements-linux.txt
+  fi
   echo "✅ 依赖安装完成"
 fi
 
