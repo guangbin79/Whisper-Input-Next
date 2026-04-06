@@ -50,10 +50,13 @@ class KeyboardManager:
         self.state_symbol_enabled = True
 
         # 获取系统平台
-        sysetem_platform = os.getenv("SYSTEM_PLATFORM")
-        if sysetem_platform == "win" :
+        sysetem_platform = os.getenv("SYSTEM_PLATFORM", "mac")
+        if sysetem_platform == "win":
             self.sysetem_platform = Key.ctrl
             logger.info("配置到Windows平台")
+        elif sysetem_platform == "linux":
+            self.sysetem_platform = Key.ctrl
+            logger.info("配置到Linux平台")
         else:
             self.sysetem_platform = Key.cmd
             logger.info("配置到Mac平台")
