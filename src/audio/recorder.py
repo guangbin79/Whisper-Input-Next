@@ -314,13 +314,19 @@ class AudioRecorder:
                 device_idx, best_device = self._get_best_input_device()
 
                 if best_device is None:
-                    # 没有可用的白名单设备
-                    self._send_notification(
-                        title="无可用音频设备",
-                        message="请连接麦克风",
-                        subtitle="录音失败"
-                    )
-                    raise RuntimeError("没有可用的音频输入设备")
+                    # 没有白名单设备，回退到系统默认
+                    try:
+                        default_input = sd.query_devices(kind='input')
+                        device_idx = sd.default.device[0]
+                        best_device = default_input
+                        logger.info(f"白名单无匹配，使用系统默认设备: {default_input['name']}")
+                    except Exception as fallback_err:
+                        self._send_notification(
+                            title="无可用音频设备",
+                            message="请连接麦克风",
+                            subtitle="录音失败"
+                        )
+                        raise RuntimeError("没有可用的音频输入设备") from fallback_err
 
                 # 检查设备是否切换
                 new_device_name = best_device['name']
@@ -514,12 +520,18 @@ class AudioRecorder:
             device_idx, best_device = self._get_best_input_device()
 
             if best_device is None:
-                self._send_notification(
-                    title="无可用音频设备",
-                    message="请连接麦克风",
-                    subtitle="录音失败"
-                )
-                return "没有可用的音频输入设备"
+                try:
+                    default_input = sd.query_devices(kind='input')
+                    device_idx = sd.default.device[0]
+                    best_device = default_input
+                    logger.info(f"白名单无匹配，使用系统默认设备: {default_input['name']}")
+                except Exception as fallback_err:
+                    self._send_notification(
+                        title="无可用音频设备",
+                        message="请连接麦克风",
+                        subtitle="录音失败"
+                    )
+                    return "没有可用的音频输入设备"
 
             # 检查设备是否切换
             new_device_name = best_device['name']
