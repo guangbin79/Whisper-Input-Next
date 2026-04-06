@@ -63,7 +63,7 @@ class FloatingPreviewWindow:
         """)
 
         self._label = QLabel("正在聆听...", self._widget)
-        self._label.setFont(QFont("Noto Sans CJK SC", self._font_size))
+        self._label.setFont(QFont("Noto Sans CJK SC", int(self._font_size)))
         self._label.setStyleSheet("color: white; padding: 8px 12px;")
         self._label.setWordWrap(True)
         self._label.setMaximumWidth(self._max_width)
