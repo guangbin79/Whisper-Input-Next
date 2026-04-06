@@ -51,22 +51,11 @@ cd ~/Whisper-Input-Next
 python3.12 -m venv .venv
 source .venv/bin/activate
 
-# 先升级构建工具
 pip install --upgrade pip setuptools wheel
-
-# 安装核心依赖（跳过 macOS 专用的 pyobjc-*）
-pip install \
-  aiohttp annotated-types anyio certifi cffi charset-normalizer \
-  click colorlog distro exceptiongroup h11 httpcore httpx idna \
-  jiter numpy openai opencc-python-reimplemented packaging \
-  pycparser pydantic pydantic-core pyperclip python-dotenv \
-  requests six sniffio sounddevice soundfile tqdm typing-extensions urllib3
-
-# 安装 Linux GUI 和热键依赖
-pip install pynput PyQt5
+pip install -r requirements-linux.txt
 ```
 
-> **注意**：`requirements.txt` 中的 `pyobjc-core`、`pyobjc-framework-*` 是 macOS 专用，Linux 上跳过。
+> `requirements-linux.txt` 已排除 macOS 专用的 `pyobjc-*`，包含 Linux 所需的全部依赖。
 
 ## 5. 配置环境变量
 
@@ -403,5 +392,6 @@ alias whisper_off='tmux kill-session -t Whisper-Input-Next 2>/dev/null'
 │       ├── status_bar_mac.py     # macOS 原版备份
 │       ├── floating_preview.py   # Linux 浮动预览（PyQt5 版）
 │       └── floating_preview_mac.py  # macOS 原版备份
-└── requirements.txt              # 依赖列表（Linux 跳过 pyobjc-*）
+└── requirements-linux.txt        # Linux 依赖列表（无 pyobjc-*）
+└── requirements.txt              # macOS 依赖列表
 ```
