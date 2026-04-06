@@ -564,9 +564,13 @@ def main():
         # 创建三处理器架构：OpenAI + 本地 Whisper + 豆包流式
         original_platform = os.environ.get("SERVICE_PLATFORM")
 
-        # 创建 OpenAI 处理器
+        # 创建 OpenAI 处理器（可选，如果 API Key 未配置则跳过）
         os.environ["SERVICE_PLATFORM"] = "openai"
-        openai_processor = WhisperProcessor()
+        try:
+            openai_processor = WhisperProcessor()
+        except Exception as e:
+            logger.warning(f"OpenAI 处理器不可用: {e}")
+            openai_processor = None
 
         # 创建本地 Whisper 处理器（可选，如果不可用则跳过）
         os.environ["SERVICE_PLATFORM"] = "local"
