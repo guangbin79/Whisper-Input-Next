@@ -1,3 +1,4 @@
+import json
 import os
 import threading
 import time
@@ -50,7 +51,7 @@ class WhisperProcessor:
     def __init__(self):
         self.convert_to_simplified = os.getenv("CONVERT_TO_SIMPLIFIED", "false").lower() == "true"
         self.cc = OpenCC('t2s') if self.convert_to_simplified else None
-        self.symbol = SymbolProcessor()
+        self.symbol = None
         self.add_symbol = os.getenv("ADD_SYMBOL", "false").lower() == "true"
         self.optimize_result = os.getenv("OPTIMIZE_RESULT", "false").lower() == "true"
         self.service_platform = os.getenv("SERVICE_PLATFORM", "groq").lower()
@@ -76,6 +77,18 @@ class WhisperProcessor:
             api_key = os.getenv("GROQ_API_KEY")
             assert api_key, "未设置 SILICONFLOW_API_KEY 环境变量"
             self.DEFAULT_MODEL = "FunAudioLLM/SenseVoiceSmall"
+        elif self.service_platform == "glm-asr":
+            api_key = os.getenv("GLM_ASR_API_KEY")
+            assert api_key, "未设置 GLM_ASR_API_KEY 环境变量"
+            import httpx
+            self.client = OpenAI(
+                api_key=api_key,
+                base_url="https://open.bigmodel.cn/api/paas/v4",
+                http_client=httpx.Client(trust_env=False),
+            )
+            self.DEFAULT_MODEL = "glm-asr-2512"
+            self.timeout_seconds = 60
+            logger.info("GLM-ASR 处理器已初始化 (注意: 音频时长上限 30 秒)")
         else:
             raise ValueError(f"未知的平台: {self.service_platform}")
         
@@ -88,29 +101,35 @@ class WhisperProcessor:
     @timeout_decorator(180)  # OpenAI 专用超时时间
     def _call_openai_api(self, mode, audio_data, prompt):
         """调用 OpenAI GPT-4o transcribe API"""
+        model = self.DEFAULT_MODEL or "gpt-4o-transcribe"
         if mode == "translations":
             response = self.client.audio.translations.create(
-                model="gpt-4o-transcribe",
+                model=model,
                 response_format="text",
                 prompt=prompt,
                 file=("audio.wav", audio_data)
             )
         else:  # transcriptions
             response = self.client.audio.transcriptions.create(
-                model="gpt-4o-transcribe",
+                model=model,
                 response_format="text",
                 prompt=prompt,
                 file=("audio.wav", audio_data)
             )
-        return str(response).strip()
+        raw = response.text.strip() if hasattr(response, 'text') else str(response).strip()
+        if self.service_platform == "glm-asr":
+            try:
+                parsed = json.loads(raw)
+                if isinstance(parsed, dict) and "text" in parsed:
+                    return parsed["text"]
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return raw
     
     def _call_whisper_api(self, mode, audio_data, prompt):
-        """调用 Whisper API"""
-        if self.service_platform == "openai":
-            # 使用专用的 OpenAI API 调用（已有180秒超时）
+        if self.service_platform in ("openai", "glm-asr"):
             return self._call_openai_api(mode, audio_data, prompt)
         else:
-            # GROQ API 使用10秒超时
             return self._call_groq_api(mode, audio_data, prompt)
     
     @timeout_decorator(10)
@@ -130,7 +149,7 @@ class WhisperProcessor:
                 prompt=prompt,
                 file=("audio.wav", audio_data)
             )
-        return str(response).strip()
+        return response.text.strip() if hasattr(response, 'text') else str(response).strip()
 
     def process_audio(self, audio_buffer, mode="transcriptions", prompt="", archive_path=None):
         """调用 Whisper API 处理音频（转录或翻译）
@@ -156,12 +175,16 @@ class WhisperProcessor:
             logger.info(f"识别结果: {result}")
             
             # OpenAI GPT-4o transcribe 自带标点符号，无需额外处理
-            if self.service_platform != "openai":
+            if self.service_platform not in ("openai", "glm-asr"):
                 # 仅在 groq API 时添加标点符号
                 if self.service_platform == "groq" and self.add_symbol:
+                    if self.symbol is None:
+                        self.symbol = SymbolProcessor()
                     result = self.symbol.add_symbol(result)
                     logger.info(f"添加标点符号: {result}")
                 if self.optimize_result:
+                    if self.symbol is None:
+                        self.symbol = SymbolProcessor()
                     result = self.symbol.optimize_result(result)
                     logger.info(f"优化结果: {result}")
 
