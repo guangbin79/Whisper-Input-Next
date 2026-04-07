@@ -35,8 +35,7 @@ class FloatingPreviewWindow:
         self._widget: Optional[QWidget] = None
         self._label: Optional[QLabel] = None
         self._app: Optional[QApplication] = None
-        self._pending_action: Optional[str] = None
-        self._pending_text: Optional[str] = None
+        self._pending: Optional[tuple] = None
         self._started = threading.Event()
         self._thread = threading.Thread(target=self._run_qt_loop, daemon=True)
         self._thread.start()
@@ -77,8 +76,10 @@ class FloatingPreviewWindow:
         self._app.exec_()
 
     def _process_pending(self) -> None:
-        action = self._pending_action
-        text = self._pending_text
+        if self._pending is None:
+            return
+        action, text = self._pending
+        self._pending = None
         if action == "show":
             if self._label:
                 self._label.setText(text or "正在聆听...")
@@ -88,11 +89,9 @@ class FloatingPreviewWindow:
                 self._widget.adjustSize()
                 self._widget.show()
                 self._widget.raise_()
-            self._pending_action = None
         elif action == "hide":
             if self._widget:
                 self._widget.hide()
-            self._pending_action = None
         elif action == "update_text":
             if self._label and text is not None:
                 display = text
@@ -101,7 +100,6 @@ class FloatingPreviewWindow:
                 self._label.setText(display if display else "正在聆听...")
             if self._widget and self._widget.isVisible():
                 self._widget.adjustSize()
-            self._pending_action = None
 
     def show(self) -> None:
         self._pending_action = "show"
