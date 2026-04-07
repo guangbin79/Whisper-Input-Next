@@ -102,12 +102,10 @@ class FloatingPreviewWindow:
                 self._widget.adjustSize()
 
     def show(self) -> None:
-        self._pending_action = "show"
-        self._pending_text = "正在聆听..."
+        self._pending = ("show", "正在聆听...")
 
     def hide(self) -> None:
-        self._pending_action = "hide"
+        self._pending = ("hide", None)
 
     def update_text(self, text: str) -> None:
-        self._pending_action = "update_text"
-        self._pending_text = text
+        self._pending = ("update_text", text)
