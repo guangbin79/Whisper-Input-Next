@@ -257,6 +257,8 @@ class VoiceAssistant:
             job.archive_path, text, service=service, model=model, mode=job.mode,
         )
         self.keyboard_manager.type_text(text, error)
+        if job.processor == "glm-asr":
+            self.floating_preview.hide()
         logger.info(f"✅ 转录成功 (尝试 {job.attempt})")
         self._notify_status()
 
@@ -274,6 +276,7 @@ class VoiceAssistant:
             "❌ %s 转录失败 (尝试 %d)，自动重试已用尽: %s",
             job.processor, job.attempt, error_message,
         )
+        self.floating_preview.hide()
         self.keyboard_manager.show_error("❌ 自动转录失败")
         self._notify_status()
 
@@ -388,17 +391,21 @@ class VoiceAssistant:
         # GLM-ASR API 限制 30 秒，留 5 秒安全余量
         self.audio_recorder.max_record_duration = 25.0
         self.audio_recorder.start_recording()
+        self.floating_preview.show()
 
     def stop_glm_asr_recording(self):
         audio = self.audio_recorder.stop_recording()
         self.audio_recorder.max_record_duration = 600.0
+        self.floating_preview.update_text("正在转录...")
         if audio == "TOO_SHORT":
             logger.warning("录音时长太短，状态将重置")
+            self.floating_preview.hide()
             self.keyboard_manager.reset_state()
             return
         audio_bytes = self._buffer_to_bytes(audio)
         if not audio_bytes:
             logger.error("没有录音数据，状态将重置")
+            self.floating_preview.hide()
             self.keyboard_manager.reset_state()
             return
         archive_path = self._archive_audio_bytes(audio_bytes)
