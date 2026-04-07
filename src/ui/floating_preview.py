@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import subprocess
 import threading
+import queue
+from ..utils.logger import logger
 from typing import Optional, Tuple
 
 from PyQt5.QtWidgets import QApplication, QLabel, QWidget
@@ -35,7 +37,7 @@ class FloatingPreviewWindow:
         self._widget: Optional[QWidget] = None
         self._label: Optional[QLabel] = None
         self._app: Optional[QApplication] = None
-        self._pending: Optional[tuple] = None
+        self._queue: queue.Queue = queue.Queue()
         self._started = threading.Event()
         self._thread = threading.Thread(target=self._run_qt_loop, daemon=True)
         self._thread.start()
@@ -49,9 +51,9 @@ class FloatingPreviewWindow:
         self._widget = QWidget()
         self._widget.setWindowFlags(
             Qt.FramelessWindowHint |
-            Qt.WindowStaysOnTopHint |
-            Qt.Tool
+            Qt.WindowStaysOnTopHint
         )
+        self._widget.setAttribute(Qt.WA_ShowWithoutActivating)
         self._widget.setAttribute(Qt.WA_TranslucentBackground)
         self._widget.setStyleSheet("""
             QWidget {
@@ -59,7 +61,6 @@ class FloatingPreviewWindow:
                 border-radius: 10px;
             }
         """)
-
         self._label = QLabel("", self._widget)
         self._label.setFont(QFont("Noto Sans CJK SC", int(self._font_size)))
         self._label.setStyleSheet("color: white; padding: 8px 12px;")
@@ -67,45 +68,57 @@ class FloatingPreviewWindow:
         self._label.setMaximumWidth(self._max_width)
         self._widget.adjustSize()
         self._widget.hide()
-
         timer = QTimer()
         timer.timeout.connect(self._process_pending)
         timer.start(50)
-
         self._started.set()
+        logger.info(f"[FloatingPreview] Qt event loop started in thread={threading.current_thread().name}")
         self._app.exec_()
 
     def _process_pending(self) -> None:
-        if self._pending is None:
-            return
-        action, text = self._pending
-        self._pending = None
-        if action == "show":
-            if self._label:
-                self._label.setText(text or "正在聆听...")
-            x, y = _get_active_window_cursor_pos()
-            if self._widget:
-                self._widget.move(int(x), int(y) + 30)
-                self._widget.adjustSize()
-                self._widget.show()
-                self._widget.raise_()
-        elif action == "hide":
-            if self._widget:
-                self._widget.hide()
-        elif action == "update_text":
-            if self._label and text is not None:
-                display = text
-                if len(text) > 100:
-                    display = "..." + text[-97:]
-                self._label.setText(display if display else "正在聆听...")
-            if self._widget and self._widget.isVisible():
-                self._widget.adjustSize()
+        while True:
+            try:
+                action, text = self._queue.get_nowait()
+            except queue.Empty:
+                return
+            logger.info(f"[FloatingPreview] Processing: action={action}, text={text}")
+            if action == "show":
+                if self._label:
+                    self._label.setText(text or "正在聆听...")
+                x, y = _get_active_window_cursor_pos()
+                if self._widget:
+                    self._widget.move(int(x), int(y) + 30)
+                    self._widget.adjustSize()
+                    self._widget.show()
+                    self._widget.raise_()
+                    QTimer.singleShot(100, self._raise_widget)
+                    logger.info(f"[FloatingPreview] Widget shown at ({x}, {y + 30})")
+            elif action == "hide":
+                if self._widget:
+                    self._widget.hide()
+                    logger.info("[FloatingPreview] Widget hidden")
+            elif action == "update_text":
+                if self._label and text is not None:
+                    display = text
+                    if len(text) > 100:
+                        display = "..." + text[-97:]
+                    self._label.setText(display if display else "正在聆听...")
+                if self._widget and self._widget.isVisible():
+                    self._widget.adjustSize()
+                logger.info(f"[FloatingPreview] Text updated to '{text}', widget visible={self._widget.isVisible() if self._widget else False}")
+
+    def _raise_widget(self) -> None:
+        if self._widget and self._widget.isVisible():
+            self._widget.raise_()
+            self._widget.activateWindow()
 
     def show(self) -> None:
-        self._pending = ("show", "正在聆听...")
+        logger.info(f"[FloatingPreview] show() called from thread={threading.current_thread().name}")
+        self._queue.put(("show", "正在聆听..."))
 
     def hide(self) -> None:
-        self._pending = ("hide", None)
+        self._queue.put(("hide", None))
 
     def update_text(self, text: str) -> None:
-        self._pending = ("update_text", text)
+        logger.info(f"[FloatingPreview] update_text('{text}') called")
+        self._queue.put(("update_text", text))
