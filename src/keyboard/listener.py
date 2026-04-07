@@ -53,12 +53,15 @@ class KeyboardManager:
         sysetem_platform = os.getenv("SYSTEM_PLATFORM", "mac")
         if sysetem_platform == "win":
             self.sysetem_platform = Key.ctrl
+            self.is_linux = False
             logger.info("配置到Windows平台")
         elif sysetem_platform == "linux":
             self.sysetem_platform = Key.ctrl
+            self.is_linux = True
             logger.info("配置到Linux平台")
         else:
             self.sysetem_platform = Key.cmd
+            self.is_linux = False
             logger.info("配置到Mac平台")
         
 
@@ -243,10 +246,16 @@ class KeyboardManager:
             # 最终转录文本通过剪贴板输入
             pyperclip.copy(text)
             
-            # 模拟 Ctrl + V 粘贴文本
-            with self.keyboard.pressed(self.sysetem_platform):
-                self.keyboard.press('v')
-                self.keyboard.release('v')
+            # 模拟粘贴文本 (Linux 终端用 Ctrl+Shift+V)
+            if self.is_linux:
+                with self.keyboard.pressed(Key.ctrl):
+                    with self.keyboard.pressed(Key.shift):
+                        self.keyboard.press('v')
+                        self.keyboard.release('v')
+            else:
+                with self.keyboard.pressed(self.sysetem_platform):
+                    self.keyboard.press('v')
+                    self.keyboard.release('v')
             
             # 等待一小段时间确保文本已输入
             time.sleep(0.5)
@@ -291,9 +300,15 @@ class KeyboardManager:
         else:
             # 其他文本（如错误消息、警告等）通过剪贴板输入
             pyperclip.copy(text)
-            with self.keyboard.pressed(self.sysetem_platform):
-                self.keyboard.press('v')
-                self.keyboard.release('v')
+            if self.is_linux:
+                with self.keyboard.pressed(Key.ctrl):
+                    with self.keyboard.pressed(Key.shift):
+                        self.keyboard.press('v')
+                        self.keyboard.release('v')
+            else:
+                with self.keyboard.pressed(self.sysetem_platform):
+                    self.keyboard.press('v')
+                    self.keyboard.release('v')
         
         # 更新临时文本长度
         self.temp_text_length = len(text)
