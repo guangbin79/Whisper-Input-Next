@@ -110,7 +110,6 @@ class FloatingPreviewWindow:
     def _raise_widget(self) -> None:
         if self._widget and self._widget.isVisible():
             self._widget.raise_()
-            self._widget.activateWindow()
 
     def show(self) -> None:
         logger.info(f"[FloatingPreview] show() called from thread={threading.current_thread().name}")

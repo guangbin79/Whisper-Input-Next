@@ -256,9 +256,9 @@ class VoiceAssistant:
         self._save_transcription_cache(
             job.archive_path, text, service=service, model=model, mode=job.mode,
         )
-        self.keyboard_manager.type_text(text, error)
         if job.processor == "glm-asr":
             self.floating_preview.hide()
+        self.keyboard_manager.type_text(text, error)
         logger.info(f"✅ 转录成功 (尝试 {job.attempt})")
         self._notify_status()
 
