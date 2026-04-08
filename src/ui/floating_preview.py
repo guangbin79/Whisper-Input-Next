@@ -13,6 +13,30 @@ from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QFont
 
 
+def _get_active_window_id() -> str:
+    """Get the X11 window ID of the currently active window."""
+    try:
+        result = subprocess.run(
+            ["xdotool", "getactivewindow"],
+            capture_output=True, text=True, timeout=1
+        )
+        return result.stdout.strip()
+    except Exception:
+        return ""
+
+
+def _restore_focus(window_id: str) -> None:
+    """Restore focus to a previously active window."""
+    if window_id:
+        try:
+            subprocess.run(
+                ["xdotool", "windowactivate", window_id],
+                capture_output=True, timeout=1
+            )
+        except Exception:
+            pass
+
+
 def _get_active_window_cursor_pos() -> Tuple[float, float]:
     try:
         result = subprocess.run(
@@ -27,17 +51,6 @@ def _get_active_window_cursor_pos() -> Tuple[float, float]:
     except Exception:
         pass
     return (100.0, 100.0)
-
-def _get_active_window_id() -> str:
-    """Get the X11 window ID of the currently active window."""
-    try:
-        result = subprocess.run(
-            ["xdotool", "getactivewindow"],
-            capture_output=True, text=True, timeout=1
-        )
-        return result.stdout.strip()
-    except Exception:
-        return ""
 
 
 class FloatingPreviewWindow:
@@ -54,17 +67,6 @@ class FloatingPreviewWindow:
         self._thread.start()
         self._started.wait(timeout=5)
 
-    def _restore_focus(self, window_id: str) -> None:
-        """Restore focus to a previously active window."""
-        if window_id:
-            try:
-                subprocess.run(
-                    ["xdotool", "windowactivate", window_id],
-                    capture_output=True, timeout=1
-                )
-            except Exception:
-                pass
-
     def _run_qt_loop(self) -> None:
         self._app = QApplication.instance()
         if self._app is None:
@@ -73,7 +75,9 @@ class FloatingPreviewWindow:
         self._widget = QWidget()
         self._widget.setWindowFlags(
             Qt.FramelessWindowHint |
-            Qt.WindowStaysOnTopHint
+            Qt.WindowStaysOnTopHint |
+            Qt.WindowDoesNotAcceptFocus |
+            Qt.Tool
         )
         self._widget.setAttribute(Qt.WA_ShowWithoutActivating)
         self._widget.setAttribute(Qt.WA_TranslucentBackground)
@@ -89,7 +93,14 @@ class FloatingPreviewWindow:
         self._label.setWordWrap(True)
         self._label.setMaximumWidth(self._max_width)
         self._widget.adjustSize()
+
+        # Pre-map the window offscreen so X11 WM registers it before first use.
+        # This prevents the window manager from treating the first real show()
+        # as a "new window" event that could steal focus.
+        self._widget.move(-10000, -10000)
+        self._widget.show()
         self._widget.hide()
+
         timer = QTimer()
         timer.timeout.connect(self._process_pending)
         timer.start(50)
@@ -114,7 +125,9 @@ class FloatingPreviewWindow:
                     self._widget.adjustSize()
                     self._widget.show()
                     self._widget.raise_()
-                    QTimer.singleShot(50, lambda: self._restore_focus(prev_window))
+                    # Safety net: restore focus if the WM still gave it to us
+                    if prev_window:
+                        QTimer.singleShot(50, lambda wid=prev_window: _restore_focus(wid))
                     logger.info(f"[FloatingPreview] Widget shown at ({x}, {y + 30})")
             elif action == "hide":
                 if self._widget:
