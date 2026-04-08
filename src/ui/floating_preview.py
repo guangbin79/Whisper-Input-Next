@@ -28,6 +28,17 @@ def _get_active_window_cursor_pos() -> Tuple[float, float]:
         pass
     return (100.0, 100.0)
 
+def _get_active_window_id() -> str:
+    """Get the X11 window ID of the currently active window."""
+    try:
+        result = subprocess.run(
+            ["xdotool", "getactivewindow"],
+            capture_output=True, text=True, timeout=1
+        )
+        return result.stdout.strip()
+    except Exception:
+        return ""
+
 
 class FloatingPreviewWindow:
 
@@ -42,6 +53,17 @@ class FloatingPreviewWindow:
         self._thread = threading.Thread(target=self._run_qt_loop, daemon=True)
         self._thread.start()
         self._started.wait(timeout=5)
+
+    def _restore_focus(self, window_id: str) -> None:
+        """Restore focus to a previously active window."""
+        if window_id:
+            try:
+                subprocess.run(
+                    ["xdotool", "windowactivate", window_id],
+                    capture_output=True, timeout=1
+                )
+            except Exception:
+                pass
 
     def _run_qt_loop(self) -> None:
         self._app = QApplication.instance()
@@ -83,6 +105,7 @@ class FloatingPreviewWindow:
                 return
             logger.info(f"[FloatingPreview] Processing: action={action}, text={text}")
             if action == "show":
+                prev_window = _get_active_window_id()
                 if self._label:
                     self._label.setText(text or "正在聆听...")
                 x, y = _get_active_window_cursor_pos()
@@ -91,7 +114,7 @@ class FloatingPreviewWindow:
                     self._widget.adjustSize()
                     self._widget.show()
                     self._widget.raise_()
-                    QTimer.singleShot(100, self._raise_widget)
+                    QTimer.singleShot(50, lambda: self._restore_focus(prev_window))
                     logger.info(f"[FloatingPreview] Widget shown at ({x}, {y + 30})")
             elif action == "hide":
                 if self._widget:
@@ -106,10 +129,6 @@ class FloatingPreviewWindow:
                 if self._widget and self._widget.isVisible():
                     self._widget.adjustSize()
                 logger.info(f"[FloatingPreview] Text updated to '{text}', widget visible={self._widget.isVisible() if self._widget else False}")
-
-    def _raise_widget(self) -> None:
-        if self._widget and self._widget.isVisible():
-            self._widget.raise_()
 
     def show(self) -> None:
         logger.info(f"[FloatingPreview] show() called from thread={threading.current_thread().name}")
