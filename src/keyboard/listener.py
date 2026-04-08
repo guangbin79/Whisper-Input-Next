@@ -88,9 +88,8 @@ class KeyboardManager:
         except KeyError:
             logger.error(f"无效的翻译按钮配置：{translations_button}")
 
-        logger.info(f"按 {translations_button} + {transcriptions_button} 键：切换录音状态（OpenAI GPT-4o transcribe 模式）")
-        logger.info(f"按 {translations_button} + I 键：切换录音状态（本地 Whisper 模式）")
-        logger.info(f"两种模式都是按一下开始，再按一下结束")
+        logger.info(f"按住 {translations_button} + {transcriptions_button} 键：按住录音，松开转录（OpenAI GPT-4o transcribe 模式）")
+        logger.info(f"按住 {translations_button} + I 键：按住录音，松开转录（本地 Whisper 模式）")
     
     @property
     def state(self):
@@ -313,8 +312,8 @@ class KeyboardManager:
         # 更新临时文本长度
         self.temp_text_length = len(text)
     
-    def toggle_recording(self):
-        """切换录音状态"""
+    def start_recording(self):
+        """开始录音（hold模式：按下触发）"""
         current_time = time.time()
 
         # 防抖处理
@@ -322,21 +321,14 @@ class KeyboardManager:
             return
 
         self.last_key_time = current_time
-        
-        if not self.is_recording:
-            # 开始录音
-            if self.state.can_start_recording:
-                self.is_recording = True
-                self.state = InputState.RECORDING
-                logger.info("🎤 开始录音（OpenAI GPT-4o transcribe 模式）")
-        else:
-            # 停止录音
-            self.is_recording = False
-            self.state = InputState.PROCESSING
-            logger.info("⏹️ 停止录音（OpenAI GPT-4o transcribe 模式）")
-    
-    def toggle_kimi_recording(self):
-        """切换本地 Whisper 录音状态"""
+
+        if self.state.can_start_recording:
+            self.is_recording = True
+            self.state = InputState.RECORDING
+            logger.info("🎤 开始录音（OpenAI GPT-4o transcribe 模式）")
+
+    def start_kimi_recording(self):
+        """开始本地 Whisper 录音（hold模式：按下触发）"""
         current_time = time.time()
 
         # 防抖处理
@@ -344,18 +336,23 @@ class KeyboardManager:
             return
 
         self.last_key_time = current_time
-        
-        if not self.is_recording:
-            # 开始录音
-            if self.state.can_start_recording:
-                self.is_recording = True
-                self.state = InputState.RECORDING_KIMI
-                logger.info("🎤 开始录音（本地 Whisper 模式）")
-        else:
-            # 停止录音
-            self.is_recording = False
-            self.state = InputState.PROCESSING_KIMI
-            logger.info("⏹️ 停止录音（本地 Whisper 模式）")
+
+        if self.state.can_start_recording:
+            self.is_recording = True
+            self.state = InputState.RECORDING_KIMI
+            logger.info("🎤 开始录音（本地 Whisper 模式）")
+
+    def stop_recording(self):
+        """停止录音（hold模式：松开触发）"""
+        if self.is_recording:
+            if self.state == InputState.RECORDING:
+                self.is_recording = False
+                self.state = InputState.PROCESSING
+                logger.info("⏹️ 停止录音（OpenAI GPT-4o transcribe 模式）")
+            elif self.state == InputState.RECORDING_KIMI:
+                self.is_recording = False
+                self.state = InputState.PROCESSING_KIMI
+                logger.info("⏹️ 停止录音（本地 Whisper 模式）")
 
     def on_press(self, key):
         """按键按下时的回调"""
@@ -363,40 +360,34 @@ class KeyboardManager:
             # 检查转录按钮（字符键或特殊键）
             is_transcription_key = False
             if isinstance(self.transcriptions_button, str):
-                # 字符键
                 is_transcription_key = hasattr(key, 'char') and key.char == self.transcriptions_button
             else:
-                # 特殊键
                 is_transcription_key = key == self.transcriptions_button
                 
             # 检查翻译按钮（字符键或特殊键）
             is_translation_key = False
             if isinstance(self.translations_button, str):
-                # 字符键
                 is_translation_key = hasattr(key, 'char') and key.char == self.translations_button
             else:
-                # 特殊键
                 is_translation_key = key == self.translations_button
             
-            # 检查I键（用于本地 Whisper 模式）
+            # I键：开始本地 Whisper 录音
             if hasattr(key, 'char') and key.char == 'i':
                 self.i_pressed = True
-                # 检查是否同时按下了ctrl+i（本地 Whisper 模式）
                 if self.ctrl_pressed and self.i_pressed:
-                    self.toggle_kimi_recording()
-            elif is_transcription_key:  # F键
+                    self.start_kimi_recording()
+            # F键：开始 OpenAI 转录录音
+            elif is_transcription_key:
                 self.f_pressed = True
-                # 检查是否同时按下了ctrl+f
                 if self.ctrl_pressed and self.f_pressed:
-                    self.toggle_recording()
-            elif is_translation_key:  # Ctrl键
+                    self.start_recording()
+            # Ctrl键：检查是否已按下 F 或 I
+            elif is_translation_key:
                 self.ctrl_pressed = True
-                # 检查是否同时按下了ctrl+f（OpenAI GPT-4o transcribe 模式）
                 if self.ctrl_pressed and self.f_pressed:
-                    self.toggle_recording()
-                # 检查是否同时按下了ctrl+i（本地 Whisper 模式）
+                    self.start_recording()
                 elif self.ctrl_pressed and self.i_pressed:
-                    self.toggle_kimi_recording()
+                    self.start_kimi_recording()
         except AttributeError:
             pass
 
@@ -406,28 +397,29 @@ class KeyboardManager:
             # 检查转录按钮（字符键或特殊键）
             is_transcription_key = False
             if isinstance(self.transcriptions_button, str):
-                # 字符键
                 is_transcription_key = hasattr(key, 'char') and key.char == self.transcriptions_button
             else:
-                # 特殊键
                 is_transcription_key = key == self.transcriptions_button
                 
             # 检查翻译按钮（字符键或特殊键）
             is_translation_key = False
             if isinstance(self.translations_button, str):
-                # 字符键
                 is_translation_key = hasattr(key, 'char') and key.char == self.translations_button
             else:
-                # 特殊键
                 is_translation_key = key == self.translations_button
                 
-            # 检查I键释放
+            # I键释放
             if hasattr(key, 'char') and key.char == 'i':
                 self.i_pressed = False
-            elif is_transcription_key:  # F键释放
+                self.stop_recording()
+            # F键释放
+            elif is_transcription_key:
                 self.f_pressed = False
-            elif is_translation_key:  # Ctrl键释放
+                self.stop_recording()
+            # Ctrl键释放
+            elif is_translation_key:
                 self.ctrl_pressed = False
+                self.stop_recording()
 
         except AttributeError:
             pass
