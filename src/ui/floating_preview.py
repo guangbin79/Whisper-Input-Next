@@ -92,7 +92,7 @@ class FloatingPreviewWindow:
         self._label = QLabel("", self._widget)
         self._label.setFont(QFont("Noto Sans CJK SC", int(self._font_size)))
         self._label.setStyleSheet("color: white; padding: 8px 12px;")
-        self._label.setWordWrap(True)
+        self._label.setWordWrap(False)
         self._label.setMaximumWidth(self._max_width)
         layout = QVBoxLayout(self._widget)
         layout.setContentsMargins(0, 0, 0, 0)
