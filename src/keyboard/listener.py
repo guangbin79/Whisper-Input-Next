@@ -90,6 +90,17 @@ class KeyboardManager:
 
         logger.info(f"按住 {translations_button} + {transcriptions_button} 键：按住录音，松开转录（OpenAI GPT-4o transcribe 模式）")
         logger.info(f"按住 {translations_button} + I 键：按住录音，松开转录（本地 Whisper 模式）")
+
+        # Hold按钮：单键按住录音，松开转录（如 alt_r）
+        self._hold_button = None
+        self._hold_pressed = False
+        hold_button = os.getenv("HOLD_BUTTON", "").strip().lower()
+        if hold_button:
+            try:
+                self._hold_button = Key[hold_button]
+                logger.info(f"按住 {hold_button} 键：按住录音，松开转录")
+            except KeyError:
+                logger.error(f"无效的 HOLD_BUTTON 配置：{hold_button}")
     
     @property
     def state(self):
@@ -357,6 +368,12 @@ class KeyboardManager:
     def on_press(self, key):
         """按键按下时的回调"""
         try:
+            # Hold按钮：单键按住即开始录音
+            if self._hold_button and key == self._hold_button:
+                self._hold_pressed = True
+                self.start_recording()
+                return
+
             # 检查转录按钮（字符键或特殊键）
             is_transcription_key = False
             if isinstance(self.transcriptions_button, str):
@@ -394,6 +411,12 @@ class KeyboardManager:
     def on_release(self, key):
         """按键释放时的回调"""
         try:
+            # Hold按钮释放：停止录音
+            if self._hold_button and key == self._hold_button:
+                self._hold_pressed = False
+                self.stop_recording()
+                return
+
             # 检查转录按钮（字符键或特殊键）
             is_transcription_key = False
             if isinstance(self.transcriptions_button, str):
