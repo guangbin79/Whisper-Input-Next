@@ -8,7 +8,7 @@ import queue
 from ..utils.logger import logger
 from typing import Optional, Tuple
 
-from PyQt5.QtWidgets import QApplication, QLabel, QWidget
+from PyQt5.QtWidgets import QApplication, QLabel, QWidget, QVBoxLayout
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QFont
 
@@ -37,7 +37,7 @@ def _restore_focus(window_id: str) -> None:
             pass
 
 
-def _get_active_window_cursor_pos() -> Tuple[float, float]:
+def _get_active_window_position() -> Tuple[float, float]:
     try:
         result = subprocess.run(
             ["xdotool", "getactivewindow", "getwindowgeometry"],
@@ -62,6 +62,8 @@ class FloatingPreviewWindow:
         self._label: Optional[QLabel] = None
         self._app: Optional[QApplication] = None
         self._queue: queue.Queue = queue.Queue()
+        self._prev_window: str = ""
+        self._restore_timer: Optional[QTimer] = None
         self._started = threading.Event()
         self._thread = threading.Thread(target=self._run_qt_loop, daemon=True)
         self._thread.start()
@@ -92,6 +94,9 @@ class FloatingPreviewWindow:
         self._label.setStyleSheet("color: white; padding: 8px 12px;")
         self._label.setWordWrap(True)
         self._label.setMaximumWidth(self._max_width)
+        layout = QVBoxLayout(self._widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self._label)
         self._widget.adjustSize()
 
         # Pre-map the window offscreen so X11 WM registers it before first use.
@@ -116,23 +121,43 @@ class FloatingPreviewWindow:
                 return
             logger.info(f"[FloatingPreview] Processing: action={action}, text={text}")
             if action == "show":
-                prev_window = _get_active_window_id()
+                self._prev_window = _get_active_window_id()
+                # Cancel any pending restore timer from previous show
+                if self._restore_timer is not None:
+                    self._restore_timer.stop()
+                    self._restore_timer = None
                 if self._label:
                     self._label.setText(text or "正在聆听...")
-                x, y = _get_active_window_cursor_pos()
+                x, y = _get_active_window_position()
                 if self._widget:
                     self._widget.move(int(x), int(y) + 30)
                     self._widget.adjustSize()
                     self._widget.show()
                     self._widget.raise_()
-                    # Safety net: restore focus if the WM still gave it to us
-                    if prev_window:
-                        QTimer.singleShot(50, lambda wid=prev_window: _restore_focus(wid))
+                    # Re-assert non-activating attribute after raise
+                    self._widget.setAttribute(Qt.WA_ShowWithoutActivating)
+                    # Three-stage focus restore to handle async WM behavior
+                    if self._prev_window:
+                        wid = self._prev_window
+                        QTimer.singleShot(30, lambda w=wid: _restore_focus(w))
+                        QTimer.singleShot(100, lambda w=wid: _restore_focus(w))
+                        self._restore_timer = QTimer()
+                        self._restore_timer.setSingleShot(True)
+                        self._restore_timer.timeout.connect(lambda w=wid: _restore_focus(w))
+                        self._restore_timer.start(300)
                     logger.info(f"[FloatingPreview] Widget shown at ({x}, {y + 30})")
             elif action == "hide":
                 if self._widget:
                     self._widget.hide()
-                    logger.info("[FloatingPreview] Widget hidden")
+                # Restore focus to the previously active window
+                if self._prev_window:
+                    _restore_focus(self._prev_window)
+                    self._prev_window = ""
+                # Cancel any pending restore timer
+                if self._restore_timer is not None:
+                    self._restore_timer.stop()
+                    self._restore_timer = None
+                logger.info("[FloatingPreview] Widget hidden, focus restored")
             elif action == "update_text":
                 if self._label and text is not None:
                     display = text
