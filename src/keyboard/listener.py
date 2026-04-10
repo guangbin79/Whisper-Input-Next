@@ -4,6 +4,7 @@ from ..utils.logger import logger
 import time
 from .inputState import InputState
 import os
+import subprocess
 
 
 class KeyboardManager:
@@ -102,6 +103,83 @@ class KeyboardManager:
             except KeyError:
                 logger.error(f"无效的 HOLD_BUTTON 配置：{hold_button}")
     
+    _TERMINAL_CLASSES = frozenset({
+        'gnome-terminal', 'gnome-terminal-server', 'org.gnome.terminal',
+        'konsole', 'yakuake',
+        'alacritty', 'kitty', 'kitty-term',
+        'tilix', 'terminator', 'terminology',
+        'xterm', 'uxterm', 'rxvt', 'urxvt', 'st-256color',
+        'foot', 'footclient',
+        'wezterm', 'mintty',
+        'tmux', 'screen',
+        'code',
+    })
+
+    def _linux_paste(self):
+        """在 Linux 下执行粘贴操作，根据当前窗口类型选择快捷键。
+
+        终端用 Ctrl+Shift+V，GUI 用 Ctrl+V。
+        优先使用 xdotool 发送按键，回退到 pynput。
+        """
+        is_terminal = self._is_active_window_terminal()
+        shortcut = 'ctrl+shift+v' if is_terminal else 'ctrl+v'
+        try:
+            subprocess.run(
+                ['xdotool', 'keyup', 'alt', 'alt_r', 'shift', 'control', 'super'],
+                timeout=1,
+            )
+            time.sleep(0.05)
+            subprocess.run(
+                ['xdotool', 'key', shortcut],
+                capture_output=True, text=True, timeout=2,
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+            logger.warning(f"xdotool 粘贴失败，回退到 pynput: {e}")
+            if is_terminal:
+                with self.keyboard.pressed(Key.ctrl):
+                    with self.keyboard.pressed(Key.shift):
+                        self.keyboard.press('v')
+                        self.keyboard.release('v')
+            else:
+                with self.keyboard.pressed(Key.ctrl):
+                    self.keyboard.press('v')
+                    self.keyboard.release('v')
+
+    def _is_active_window_terminal(self) -> bool:
+        """用 xprop 检测当前活跃窗口是否为终端（仅 Linux）。
+
+        xdotool/xprop 不可用或执行失败时回退到终端模式（Ctrl+Shift+V）。
+        """
+        if not self.is_linux:
+            return False
+        try:
+            win_id = subprocess.run(
+                ['xdotool', 'getactivewindow'],
+                capture_output=True, text=True, timeout=1,
+            )
+            if win_id.returncode != 0:
+                return True
+            result = subprocess.run(
+                ['xprop', '-id', win_id.stdout.strip(), 'WM_CLASS'],
+                capture_output=True, text=True, timeout=1,
+            )
+            if result.returncode != 0:
+                return True
+            # WM_CLASS 输出格式: WM_CLASS(STRING) = "gnome-terminal-server", "Gnome-terminal"
+            wm_output = result.stdout.strip().lower()
+            for cls in self._TERMINAL_CLASSES:
+                if cls in wm_output:
+                    return True
+            if 'terminal' in wm_output or wm_output.endswith('term'):
+                return True
+            return False
+        except FileNotFoundError:
+            logger.debug("xdotool 或 xprop 未安装，回退到终端粘贴模式 (Ctrl+Shift+V)")
+            return True
+        except Exception as e:
+            logger.debug(f"窗口检测异常，回退到终端粘贴模式: {e}")
+            return True
+
     @property
     def state(self):
         """获取当前状态"""
@@ -256,12 +334,8 @@ class KeyboardManager:
             # 最终转录文本通过剪贴板输入
             pyperclip.copy(text)
             
-            # 模拟粘贴文本 (Linux 终端用 Ctrl+Shift+V)
             if self.is_linux:
-                with self.keyboard.pressed(Key.ctrl):
-                    with self.keyboard.pressed(Key.shift):
-                        self.keyboard.press('v')
-                        self.keyboard.release('v')
+                self._linux_paste()
             else:
                 with self.keyboard.pressed(self.sysetem_platform):
                     self.keyboard.press('v')
@@ -311,10 +385,7 @@ class KeyboardManager:
             # 其他文本（如错误消息、警告等）通过剪贴板输入
             pyperclip.copy(text)
             if self.is_linux:
-                with self.keyboard.pressed(Key.ctrl):
-                    with self.keyboard.pressed(Key.shift):
-                        self.keyboard.press('v')
-                        self.keyboard.release('v')
+                self._linux_paste()
             else:
                 with self.keyboard.pressed(self.sysetem_platform):
                     self.keyboard.press('v')
