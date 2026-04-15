@@ -51,13 +51,21 @@ def check_microphone_permissions():
 
 
 class VoiceAssistant:
-    def __init__(self, openai_processor, local_processor, doubao_processor, glm_asr_processor=None):
+    def __init__(
+        self,
+        openai_processor,
+        local_processor,
+        doubao_processor,
+        glm_asr_processor=None,
+        groq_processor=None,
+    ):
         self.audio_recorder = AudioRecorder()
         self.audio_archive = AudioArchiveManager()
         self.openai_processor = openai_processor
         self.local_processor = local_processor
         self.doubao_processor = doubao_processor
         self.glm_asr_processor = glm_asr_processor
+        self.groq_processor = groq_processor
         self.job_queue: queue.Queue[TranscriptionJob] = queue.Queue()
         self._current_state = InputState.IDLE
 
@@ -73,7 +81,11 @@ class VoiceAssistant:
         self._current_streaming_archive_path: Optional[str] = None
 
         # Ctrl+F 路由
-        if self.transcription_service == "doubao" and self.doubao_processor and self.doubao_processor.is_available():
+        if (
+            self.transcription_service == "doubao"
+            and self.doubao_processor
+            and self.doubao_processor.is_available()
+        ):
             ctrl_f_start = self.start_doubao_streaming
             ctrl_f_stop = self.stop_doubao_streaming
             logger.info("Ctrl+F 使用豆包流式识别")
@@ -81,6 +93,10 @@ class VoiceAssistant:
             ctrl_f_start = self.start_glm_asr_recording
             ctrl_f_stop = self.stop_glm_asr_recording
             logger.info("Ctrl+F 使用智谱 GLM-ASR")
+        elif self.transcription_service == "groq" and self.groq_processor:
+            ctrl_f_start = self.start_groq_recording
+            ctrl_f_stop = self.stop_groq_recording
+            logger.info("Ctrl+F 使用 Groq Whisper")
         else:
             ctrl_f_start = self.start_openai_recording
             ctrl_f_stop = self.stop_openai_recording
@@ -99,7 +115,9 @@ class VoiceAssistant:
 
         self.keyboard_manager.set_state_symbol_enabled(False)
         self.audio_recorder.set_auto_stop_callback(self._handle_auto_stop)
-        self.audio_recorder.set_device_disconnect_callback(self._handle_device_disconnect)
+        self.audio_recorder.set_device_disconnect_callback(
+            self._handle_device_disconnect
+        )
 
         self._worker_thread = threading.Thread(
             target=self._job_worker,
@@ -133,6 +151,12 @@ class VoiceAssistant:
             and self.glm_asr_processor
         ):
             self.stop_glm_asr_recording()
+        elif (
+            self._current_state == InputState.RECORDING
+            and self.transcription_service == "groq"
+            and self.groq_processor
+        ):
+            self.stop_groq_recording()
         elif self._current_state == InputState.RECORDING:
             self.stop_openai_recording()
         elif self._current_state == InputState.RECORDING_TRANSLATE:
@@ -207,7 +231,9 @@ class VoiceAssistant:
     def _run_job(self, job: TranscriptionJob):
         logger.info(
             "🎧 开始处理音频 (processor=%s, mode=%s, 尝试 %d)",
-            job.processor, job.mode, job.attempt,
+            job.processor,
+            job.mode,
+            job.attempt,
         )
         buffer = io.BytesIO(job.audio_bytes)
         try:
@@ -215,19 +241,37 @@ class VoiceAssistant:
                 if self.openai_processor is None:
                     raise RuntimeError("OpenAI 处理器不可用")
                 processor_result = self.openai_processor.process_audio(
-                    buffer, mode=job.mode, prompt="", archive_path=job.archive_path,
+                    buffer,
+                    mode=job.mode,
+                    prompt="",
+                    archive_path=job.archive_path,
                 )
             elif job.processor == "local":
                 if self.local_processor is None:
                     raise RuntimeError("本地 Whisper 处理器不可用")
                 processor_result = self.local_processor.process_audio(
-                    buffer, mode=job.mode, prompt="", archive_path=job.archive_path,
+                    buffer,
+                    mode=job.mode,
+                    prompt="",
+                    archive_path=job.archive_path,
                 )
             elif job.processor == "glm-asr":
                 if self.glm_asr_processor is None:
                     raise RuntimeError("GLM-ASR 处理器不可用")
                 processor_result = self.glm_asr_processor.process_audio(
-                    buffer, mode=job.mode, prompt="", archive_path=job.archive_path,
+                    buffer,
+                    mode=job.mode,
+                    prompt="",
+                    archive_path=job.archive_path,
+                )
+            elif job.processor == "groq":
+                if self.groq_processor is None:
+                    raise RuntimeError("Groq 处理器不可用")
+                processor_result = self.groq_processor.process_audio(
+                    buffer,
+                    mode=job.mode,
+                    prompt="",
+                    archive_path=job.archive_path,
                 )
             else:
                 raise ValueError(f"未知的处理器: {job.processor}")
@@ -254,9 +298,13 @@ class VoiceAssistant:
 
         service, model = self._get_job_cache_metadata(job)
         self._save_transcription_cache(
-            job.archive_path, text, service=service, model=model, mode=job.mode,
+            job.archive_path,
+            text,
+            service=service,
+            model=model,
+            mode=job.mode,
         )
-        if job.processor == "glm-asr":
+        if job.processor in ("glm-asr", "groq"):
             self.floating_preview.hide()
         self.keyboard_manager.type_text(text, error)
         logger.info(f"✅ 转录成功 (尝试 {job.attempt})")
@@ -266,7 +314,9 @@ class VoiceAssistant:
         if job.retries_left > 0:
             logger.warning(
                 "⚠️ %s 转录失败 (尝试 %d)，将在 %d 次内自动重试",
-                job.processor, job.attempt, job.retries_left,
+                job.processor,
+                job.attempt,
+                job.retries_left,
             )
             self._schedule_retry(job)
             self._notify_status()
@@ -274,7 +324,9 @@ class VoiceAssistant:
 
         logger.error(
             "❌ %s 转录失败 (尝试 %d)，自动重试已用尽: %s",
-            job.processor, job.attempt, error_message,
+            job.processor,
+            job.attempt,
+            error_message,
         )
         self.floating_preview.hide()
         self.keyboard_manager.show_error("❌ 自动转录失败")
@@ -283,9 +335,12 @@ class VoiceAssistant:
     def _schedule_retry(self, job: TranscriptionJob):
         next_retries = max(0, job.retries_left - 1)
         self._queue_job(
-            job.audio_bytes, job.processor,
-            mode=job.mode, archive_path=job.archive_path,
-            max_retries=next_retries, attempt=job.attempt + 1,
+            job.audio_bytes,
+            job.processor,
+            mode=job.mode,
+            archive_path=job.archive_path,
+            max_retries=next_retries,
+            attempt=job.attempt + 1,
         )
 
     def _archive_audio_bytes(self, audio_bytes: Optional[bytes]) -> Optional[str]:
@@ -294,19 +349,30 @@ class VoiceAssistant:
         return self.audio_archive.save_audio_bytes(audio_bytes)
 
     def _save_transcription_cache(
-        self, archive_path: Optional[str], transcription_result: Optional[str],
-        *, service: str, model: str, mode: str = "transcriptions",
+        self,
+        archive_path: Optional[str],
+        transcription_result: Optional[str],
+        *,
+        service: str,
+        model: str,
+        mode: str = "transcriptions",
     ) -> None:
         if not archive_path or not transcription_result:
             return
         self.audio_archive.save_transcription_result(
-            archive_path, transcription_result, service=service, model=model, mode=mode,
+            archive_path,
+            transcription_result,
+            service=service,
+            model=model,
+            mode=mode,
         )
 
     def _get_job_cache_metadata(self, job: TranscriptionJob) -> tuple[str, str]:
         if job.processor == "openai":
             service = getattr(self.openai_processor, "service_platform", "openai")
-            model = getattr(self.openai_processor, "DEFAULT_MODEL", "unknown") or "unknown"
+            model = (
+                getattr(self.openai_processor, "DEFAULT_MODEL", "unknown") or "unknown"
+            )
             return service, model
         if job.processor == "local":
             model_path = getattr(self.local_processor, "model_path", "")
@@ -314,6 +380,12 @@ class VoiceAssistant:
             return "local", model
         if job.processor == "glm-asr":
             return "glm-asr", "glm-asr-2512"
+        if job.processor == "groq":
+            model = (
+                getattr(self.groq_processor, "DEFAULT_MODEL", "whisper-large-v3-turbo")
+                or "whisper-large-v3-turbo"
+            )
+            return "groq", model
         return job.processor, "unknown"
 
     def start_openai_recording(self):
@@ -336,8 +408,10 @@ class VoiceAssistant:
             return
         archive_path = self._archive_audio_bytes(audio_bytes)
         self._queue_job(
-            audio_bytes, "openai",
-            archive_path=archive_path, max_retries=self.max_auto_retries,
+            audio_bytes,
+            "openai",
+            archive_path=archive_path,
+            max_retries=self.max_auto_retries,
         )
 
     def start_local_recording(self):
@@ -379,8 +453,41 @@ class VoiceAssistant:
             return
         archive_path = self._archive_audio_bytes(audio_bytes)
         self._queue_job(
-            audio_bytes, "openai", mode="translations",
-            archive_path=archive_path, max_retries=self.max_auto_retries,
+            audio_bytes,
+            "openai",
+            mode="translations",
+            archive_path=archive_path,
+            max_retries=self.max_auto_retries,
+        )
+
+    def start_groq_recording(self):
+        if self.groq_processor is None:
+            logger.error("Groq 处理器不可用，请配置 GROQ_API_KEY")
+            self.keyboard_manager.reset_state()
+            return
+        self.audio_recorder.start_recording()
+        self.floating_preview.show()
+
+    def stop_groq_recording(self):
+        audio = self.audio_recorder.stop_recording()
+        self.floating_preview.update_text("正在转录...")
+        if audio == "TOO_SHORT":
+            logger.warning("录音时长太短，状态将重置")
+            self.floating_preview.hide()
+            self.keyboard_manager.reset_state()
+            return
+        audio_bytes = self._buffer_to_bytes(audio)
+        if not audio_bytes:
+            logger.error("没有录音数据，状态将重置")
+            self.floating_preview.hide()
+            self.keyboard_manager.reset_state()
+            return
+        archive_path = self._archive_audio_bytes(audio_bytes)
+        self._queue_job(
+            audio_bytes,
+            "groq",
+            archive_path=archive_path,
+            max_retries=self.max_auto_retries,
         )
 
     def start_glm_asr_recording(self):
@@ -410,8 +517,10 @@ class VoiceAssistant:
             return
         archive_path = self._archive_audio_bytes(audio_bytes)
         self._queue_job(
-            audio_bytes, "glm-asr",
-            archive_path=archive_path, max_retries=self.max_auto_retries,
+            audio_bytes,
+            "glm-asr",
+            archive_path=archive_path,
+            max_retries=self.max_auto_retries,
         )
 
     def start_doubao_streaming(self):
@@ -445,7 +554,9 @@ class VoiceAssistant:
                     self._streaming_thread = None
 
         self._streaming_thread = threading.Thread(
-            target=run_streaming, name="doubao-streaming", daemon=True,
+            target=run_streaming,
+            name="doubao-streaming",
+            daemon=True,
         )
         self._streaming_thread.start()
 
@@ -460,8 +571,11 @@ class VoiceAssistant:
             if text:
                 logger.info(f"[最终输入] {text}")
                 self._save_transcription_cache(
-                    self._current_streaming_archive_path, text,
-                    service="doubao", model="bigmodel", mode="transcriptions",
+                    self._current_streaming_archive_path,
+                    text,
+                    service="doubao",
+                    model="bigmodel",
+                    mode="transcriptions",
                 )
                 self.keyboard_manager.type_text(text, None)
 
@@ -480,7 +594,10 @@ class VoiceAssistant:
         try:
             await self.doubao_processor.process_audio_stream(
                 self.audio_recorder.stream_audio_chunks(target_sample_rate=16000),
-                on_preview_text, on_final_text, on_complete, on_error,
+                on_preview_text,
+                on_final_text,
+                on_complete,
+                on_error,
                 sample_rate=16000,
             )
         except Exception as exc:
@@ -494,7 +611,9 @@ class VoiceAssistant:
         audio = self.audio_recorder.stop_streaming_recording()
         audio_bytes = self._buffer_to_bytes(audio)
         if audio_bytes:
-            self._current_streaming_archive_path = self._archive_audio_bytes(audio_bytes)
+            self._current_streaming_archive_path = self._archive_audio_bytes(
+                audio_bytes
+            )
 
     def reset_state(self):
         self.keyboard_manager.reset_state()
@@ -503,7 +622,8 @@ class VoiceAssistant:
         logger.info(f"=== 语音助手已启动 (v{__version__}) ===")
         keyboard_thread = threading.Thread(
             target=self.keyboard_manager.start_listening,
-            name="keyboard-listener", daemon=True,
+            name="keyboard-listener",
+            daemon=True,
         )
         keyboard_thread.start()
         self.status_controller.start()
@@ -558,6 +678,16 @@ def main():
             except Exception as e:
                 logger.warning(f"智谱 GLM-ASR 处理器不可用: {e}")
 
+        # Groq Whisper 处理器
+        groq_processor = None
+        if os.getenv("GROQ_API_KEY"):
+            os.environ["SERVICE_PLATFORM"] = "groq"
+            try:
+                groq_processor = WhisperProcessor()
+                logger.info("Groq Whisper 处理器已创建")
+            except Exception as e:
+                logger.warning(f"Groq Whisper 处理器不可用: {e}")
+
         # 恢复原始环境变量
         if original_platform:
             os.environ["SERVICE_PLATFORM"] = original_platform
@@ -565,7 +695,11 @@ def main():
             os.environ.pop("SERVICE_PLATFORM", None)
 
         assistant = VoiceAssistant(
-            openai_processor, local_processor, doubao_processor, glm_asr_processor,
+            openai_processor,
+            local_processor,
+            doubao_processor,
+            glm_asr_processor,
+            groq_processor,
         )
         assistant.run()
     except Exception as e:
