@@ -44,3 +44,6 @@ audio_archive/cache.json
 # 忽略 trash 目录
 trash/
 report*/
+
+# 忽略 u2pp_conformer-asr-cn-16k-online 目录
+u2pp_conformer-asr-cn-16k-online
