@@ -1,0 +1,15 @@
+{
+  "active_plan": "/home/guangbin/Whisper-Input-Next/.sisyphus/plans/wenet-integration.md",
+  "started_at": "2026-04-21T02:35:51.252Z",
+  "session_ids": [
+    "ses_252256073ffezYDl10Zr2qIheV",
+    "ses_25219a53effenJJWfbOGlG6RV4"
+  ],
+  "session_origins": {
+    "ses_252256073ffezYDl10Zr2qIheV": "direct",
+    "ses_25219a53effenJJWfbOGlG6RV4": "appended"
+  },
+  "plan_name": "wenet-integration",
+  "agent": "atlas",
+  "task_sessions": {}
+}

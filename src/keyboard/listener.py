@@ -32,6 +32,9 @@ class KeyboardManager:
         self.on_kimi_stop = on_kimi_stop
         self.on_reset_state = on_reset_state
         self.on_state_change = on_state_change
+        
+        # 获取转录服务类型（用于 HOLD_BUTTON 模式）
+        self.transcription_service = os.getenv("TRANSCRIPTION_SERVICE", "doubao")
 
         
         # 状态管理
@@ -44,6 +47,8 @@ class KeyboardManager:
             InputState.PROCESSING: "1",
             InputState.PROCESSING_KIMI: "1",
             InputState.TRANSLATING: "1",
+            InputState.DOUBAO_STREAMING: "0",
+            InputState.WENET_STREAMING: "0",
             InputState.ERROR: lambda msg: f"{msg}",  # 错误消息使用函数动态生成
             InputState.WARNING: lambda msg: f"! {msg}"  # 警告消息使用感叹号
         }
@@ -216,6 +221,20 @@ class KeyboardManager:
                     self.type_temp_text(message)
                 self.on_kimi_start()
 
+            elif new_state == InputState.WENET_STREAMING:
+                # WeNet 流式识别状态
+                self.temp_text_length = 0
+                if self.state_symbol_enabled:
+                    self.type_temp_text(message)
+                self.on_record_start()
+
+            elif new_state == InputState.DOUBAO_STREAMING:
+                # 豆包流式识别状态
+                self.temp_text_length = 0
+                if self.state_symbol_enabled:
+                    self.type_temp_text(message)
+                self.on_record_start()
+
             elif new_state == InputState.PROCESSING:
                 self._delete_previous_text()
                 if self.state_symbol_enabled:
@@ -230,6 +249,14 @@ class KeyboardManager:
                     self.type_temp_text(message)
                 self.processing_text = message
                 self.on_kimi_stop()
+
+            elif new_state == InputState.WENET_STREAMING:
+                # WeNet 流式识别中（停止录音但不改变状态）
+                self.on_record_stop()
+
+            elif new_state == InputState.DOUBAO_STREAMING:
+                # 豆包流式识别中（停止录音但不改变状态）
+                self.on_record_stop()
 
             elif new_state == InputState.TRANSLATING:
                 # 翻译状态
@@ -347,7 +374,7 @@ class KeyboardManager:
             logger.info("文本输入完成")
 
             # 清理处理状态（流式识别中不重置，保持录音状态）
-            if self.state != InputState.DOUBAO_STREAMING:
+            if self.state not in (InputState.DOUBAO_STREAMING, InputState.WENET_STREAMING):
                 self.state = InputState.IDLE
         except Exception as e:
             logger.error(f"文本输入失败: {e}")
@@ -406,8 +433,16 @@ class KeyboardManager:
 
         if self.state.can_start_recording:
             self.is_recording = True
-            self.state = InputState.RECORDING
-            logger.info("🎤 开始录音（OpenAI GPT-4o transcribe 模式）")
+            # 根据转录服务类型设置正确的状态
+            if self.transcription_service == "wenet":
+                self.state = InputState.WENET_STREAMING
+                logger.info("🎤 开始录音（WeNet 本地流式识别模式）")
+            elif self.transcription_service == "doubao":
+                self.state = InputState.DOUBAO_STREAMING
+                logger.info("🎤 开始录音（豆包流式识别模式）")
+            else:
+                self.state = InputState.RECORDING
+                logger.info("🎤 开始录音（OpenAI GPT-4o transcribe 模式）")
 
     def start_kimi_recording(self):
         """开始本地 Whisper 录音（hold模式：按下触发）"""
@@ -431,10 +466,20 @@ class KeyboardManager:
                 self.is_recording = False
                 self.state = InputState.PROCESSING
                 logger.info("⏹️ 停止录音（OpenAI GPT-4o transcribe 模式）")
+                self.on_record_stop()
             elif self.state == InputState.RECORDING_KIMI:
                 self.is_recording = False
                 self.state = InputState.PROCESSING_KIMI
                 logger.info("⏹️ 停止录音（本地 Whisper 模式）")
+                self.on_kimi_stop()
+            elif self.state == InputState.WENET_STREAMING:
+                self.is_recording = False
+                logger.info("⏹️ 停止录音（WeNet 本地流式识别模式）")
+                self.on_record_stop()
+            elif self.state == InputState.DOUBAO_STREAMING:
+                self.is_recording = False
+                logger.info("⏹️ 停止录音（豆包流式识别模式）")
+                self.on_record_stop()
 
     def on_press(self, key):
         """按键按下时的回调"""

@@ -1,0 +1,151 @@
+diff --git a/asr/wenet_provider.py b/asr/wenet_provider.py
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/asr/wenet_provider.py
+@@ -0,0 +1,109 @@
++import asyncio
++import websockets
++import json
++import base64
++
++
++class WeNetProvider:
++    def __init__(self, url="ws://127.0.0.1:10086"):
++        self.url = url
++        self.ws = None
++        self.running = False
++        self.recv_task = None
++        self.on_result_callback = None
++
++    async def connect(self):
++        self.ws = await websockets.connect(self.url)
++
++    async def start(self, on_result=None):
++        await self.connect()
++        self.running = True
++        self.on_result_callback = on_result
++        self.recv_task = asyncio.create_task(self._recv_loop())
++
++    async def _recv_loop(self):
++        try:
++            async for message in self.ws:
++                data = json.loads(message)
++
++                result = {
++                    "text": data.get("result", ""),
++                    "final": data.get("is_final", False),
++                }
++
++                if self.on_result_callback:
++                    self.on_result_callback(result)
++
++        except Exception as e:
++            print("WeNet recv error:", e)
++
++    async def send_audio(self, pcm_bytes):
++        if not self.ws or not self.running:
++            return
++
++        payload = {
++            "audio": base64.b64encode(pcm_bytes).decode()
++        }
++
++        try:
++            await self.ws.send(json.dumps(payload))
++        except Exception as e:
++            print("WeNet send error:", e)
++
++    async def stop(self):
++        self.running = False
++
++        if self.recv_task:
++            self.recv_task.cancel()
++
++        if self.ws:
++            try:
++                await self.ws.close()
++            except:
++                pass
++
++        self.ws = None
++
+diff --git a/asr/providers.py b/asr/providers.py
+index 2222222..3333333 100644
+--- a/asr/providers.py
++++ b/asr/providers.py
+@@ -1,6 +1,7 @@
+ from .whisper_provider import WhisperProvider
+ from .openai_provider import OpenAIProvider
++from .wenet_provider import WeNetProvider
+ 
+ PROVIDERS = {
+     "whisper": WhisperProvider,
+     "openai": OpenAIProvider,
++    "wenet": WeNetProvider,
+ }
+ 
+diff --git a/config.yaml b/config.yaml
+index 4444444..5555555 100644
+--- a/config.yaml
++++ b/config.yaml
+@@ -1,6 +1,12 @@
+ asr:
+-  provider: whisper
++  provider: wenet
+ 
+   whisper:
+     model: base
++
++  wenet:
++    url: ws://127.0.0.1:10086
++
++
+diff --git a/main.py b/main.py
+index 6666666..7777777 100644
+--- a/main.py
++++ b/main.py
+@@ -10,6 +10,7 @@ import asyncio
+ import yaml
+ from asr.providers import PROVIDERS
+ 
++
+ class App:
+     def __init__(self, config):
+         self.config = config
+@@ -20,13 +21,33 @@ class App:
+         provider_name = self.config["asr"]["provider"]
+         provider_cls = PROVIDERS[provider_name]
+ 
+-        self.asr = provider_cls(**self.config["asr"].get(provider_name, {}))
++        self.asr = provider_cls(**self.config["asr"].get(provider_name, {}))
+ 
+     async def start(self):
+-        await self.asr.start()
++        await self.asr.start(on_result=self.on_asr_result)
+ 
+     async def stop(self):
+         await self.asr.stop()
+ 
+     async def feed_audio(self, pcm_chunk):
+         await self.asr.send_audio(pcm_chunk)
++
++    def on_asr_result(self, result):
++        text = result.get("text", "")
++        is_final = result.get("final", False)
++
++        if not text:
++            return
++
++        if is_final:
++            self.commit_text(text)
++        else:
++            self.update_preview(text)
++
++    def update_preview(self, text):
++        print("[partial]", text)
++
++    def commit_text(self, text):
++        print("[final]", text)
++        # TODO: 输入注入逻辑（键盘模拟等）
++

@@ -47,6 +47,14 @@ This project is based on [ErlichLiu/Whisper-Input](https://github.com/ErlichLiu/
 - **Now Default for Ctrl+F**: The best voice input experience, set as default (configurable)
 - 👉 [How to get your API keys](#how-to-get-doubao-api-keys)
 
+### WeNet Local Offline ASR (NEW)
+- **Fully Offline**: No network connection required, complete privacy protection
+- **Chinese Optimized**: Based on Conformer architecture, optimized for Chinese speech recognition
+- **Real-time Streaming**: Real-time transcription as you speak, similar experience to Doubao
+- **Zero Cost**: No API fees, completely free
+- **Local Deployment**: Data never leaves your machine, maximum security
+- 👉 [How to use WeNet](#how-to-use-wenet-local-asr)
+
 ### 🎯 Core Functions
 - **Multi-platform Transcription Services**: Doubao Streaming ASR (default), OpenAI GPT-4o transcribe, local whisper.cpp
 - **Smart Hotkeys**: Ctrl+F (Doubao streaming, default) / Ctrl+I (local cost-saving mode)
@@ -171,6 +179,59 @@ CONVERT_TO_SIMPLIFIED=false
 ADD_SYMBOL=false
 OPTIMIZE_RESULT=false
 ```
+
+<a id="how-to-use-wenet-local-asr"></a>
+**How to use WeNet Local ASR**:
+
+1. **Download WeNet Model** (one-time setup):
+   ```bash
+   git clone https://www.modelscope.cn/wenet/u2pp_conformer-asr-cn-16k-online.git
+   cd u2pp_conformer-asr-cn-16k-online
+   git lfs install
+   git lfs pull
+   cd ..
+   ```
+
+2. **Start WeNet Service**:
+   ```bash
+   ./scripts/wenet_service.sh start
+   ```
+   Or manually with Docker:
+   ```bash
+   docker run -d \
+     --name hx_asr_cpu \
+     --restart unless-stopped \
+     --cpus="4" \
+     -e OMP_NUM_THREADS=4 \
+     -p 10086:10086 \
+     -v $(pwd)/u2pp_conformer-asr-cn-16k-online:/mnt/model \
+     wenetorg/wenet:latest \
+     /home/wenet/runtime/libtorch/build/bin/websocket_server_main \
+       --port 10086 \
+       --chunk_size 16 \
+       --model_path /mnt/model/final.zip \
+       --unit_path /mnt/model/units.txt
+   ```
+
+3. **Configure Environment Variables** (in `.env` file):
+   ```bash
+   WENET_ENABLED=true
+   TRANSCRIPTION_SERVICE=wenet
+   ```
+
+4. **Run the Application**:
+   ```bash
+   ./start.sh
+   ```
+
+5. **Use Ctrl+F** to trigger WeNet local streaming recognition
+
+**Notes**:
+- WeNet service requires Docker to be installed and running
+- Model download is approximately 300MB
+- CPU usage is high (recommend 4+ cores)
+- Recognition accuracy may be slightly lower than cloud services (Doubao, OpenAI)
+- Docker container takes a few seconds to start
 
 <a id="how-to-get-doubao-api-keys"></a>
 **How to get Doubao API keys**:
