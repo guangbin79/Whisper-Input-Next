@@ -92,8 +92,10 @@ class FloatingPreviewWindow:
         self._label = QLabel("", self._widget)
         self._label.setFont(QFont("Noto Sans CJK SC", int(self._font_size)))
         self._label.setStyleSheet("color: white; padding: 8px 12px;")
-        self._label.setWordWrap(False)
+        self._label.setWordWrap(True)  # 启用自动换行
         self._label.setMaximumWidth(self._max_width)
+        self._label.setMinimumWidth(200)  # 设置最小宽度
+        self._label.setAlignment(Qt.AlignLeft | Qt.AlignTop)  # 左对齐顶部对齐
         layout = QVBoxLayout(self._widget)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self._label)
@@ -113,6 +115,40 @@ class FloatingPreviewWindow:
         logger.info(f"[FloatingPreview] Qt event loop started in thread={threading.current_thread().name}")
         self._app.exec_()
 
+    def _adjust_window_size(self) -> None:
+        """根据文字内容调整窗口大小"""
+        if self._label and self._widget:
+            # 临时禁用换行以计算文字实际宽度
+            self._label.setWordWrap(False)
+            self._label.adjustSize()
+            text_width = self._label.sizeHint().width()
+            
+            # 重新启用换行
+            self._label.setWordWrap(True)
+
+            # 计算新的窗口大小（加上边距）
+            padding_horizontal = 24  # 左右边距总和
+
+            # 限制宽度在最小和最大之间
+            new_width = max(200, min(text_width + padding_horizontal, self._max_width))
+
+            # 设置 QLabel 的最大宽度为计算出的宽度（触发换行）
+            label_width = new_width - padding_horizontal
+            self._label.setMaximumWidth(label_width)
+            
+            self._label.adjustSize()
+            label_height = self._label.sizeHint().height()
+            
+            self._label.setFixedSize(label_width, label_height)
+            
+            self._widget.setFixedWidth(new_width)
+            self._widget.adjustSize()
+            
+            final_height = label_height + 16
+            self._widget.setFixedHeight(final_height)
+
+            logger.info(f"[FloatingPreview] Window size adjusted to width={new_width}, height={final_height}")
+
     def _process_pending(self) -> None:
         while True:
             try:
@@ -128,6 +164,8 @@ class FloatingPreviewWindow:
                     self._restore_timer = None
                 if self._label:
                     self._label.setText(text or "正在聆听...")
+                    # 初始化时调整大小
+                    self._adjust_window_size()
                 x, y = _get_active_window_position()
                 if self._widget:
                     self._widget.move(int(x), int(y) + 30)
@@ -160,12 +198,11 @@ class FloatingPreviewWindow:
                 logger.info("[FloatingPreview] Widget hidden, focus restored")
             elif action == "update_text":
                 if self._label and text is not None:
-                    display = text
-                    if len(text) > 100:
-                        display = "..." + text[-97:]
-                    self._label.setText(display if display else "正在聆听...")
-                if self._widget and self._widget.isVisible():
-                    self._widget.adjustSize()
+                    # 完整显示文字，不截断
+                    display = text if text else "正在聆听..."
+                    self._label.setText(display)
+                    # 调整窗口大小以适应内容
+                    self._adjust_window_size()
                 logger.info(f"[FloatingPreview] Text updated to '{text}', widget visible={self._widget.isVisible() if self._widget else False}")
 
     def show(self) -> None:
