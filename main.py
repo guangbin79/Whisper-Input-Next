@@ -551,111 +551,11 @@ class VoiceAssistant:
             self.start_openai_recording()
             return
 
-        error = self.audio_recorder.start_streaming_recording()
-        if error:
-            logger.error(f"启动流式录音失败: {error}")
-            self.keyboard_manager.reset_state()
-            return
-
-        self._current_streaming_archive_path = None
-        self._current_state = InputState.DOUBAO_STREAMING
-        self._notify_status()
-
-        def run_streaming():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            self._streaming_loop = loop
-            try:
-                loop.run_until_complete(self._run_doubao_streaming())
-            except Exception as e:
-                logger.error(f"流式转录异常: {e}", exc_info=True)
-            finally:
-                loop.close()
-                self._streaming_loop = None
-                if self._streaming_thread is threading.current_thread():
-                    self._streaming_thread = None
-
-        self._streaming_thread = threading.Thread(
-            target=run_streaming,
-            name="doubao-streaming",
-            daemon=True,
-        )
-        self._streaming_thread.start()
-
-    async def _run_doubao_streaming(self):
-        logger.info("🎤 开始豆包流式转录...")
-        self.floating_preview.show()
-
-        def on_preview_text(text):
-            self.floating_preview.update_text(text)
-
-        def on_final_text(text):
-            if text:
-                logger.info(f"[最终输入] {text}")
-                self._save_transcription_cache(
-                    self._current_streaming_archive_path,
-                    text,
-                    service="doubao",
-                    model="bigmodel",
-                    mode="transcriptions",
-                )
-                self.keyboard_manager.type_text(text, None)
-
-        def on_complete():
-            logger.info("✅ 豆包流式转录完成")
-            self.floating_preview.hide()
-            self.audio_recorder.stop_streaming_recording()
-            self.keyboard_manager.reset_state()
-
-        def on_error(error):
-            logger.error(f"❌ 豆包流式转录错误: {error}")
-            self.floating_preview.hide()
-            self.audio_recorder.reset_streaming_state(reason=f"豆包流式错误: {error}")
-            self.keyboard_manager.reset_state()
-
-        try:
-            await self.doubao_processor.process_audio_stream(
-                self.audio_recorder.stream_audio_chunks(target_sample_rate=16000),
-                on_preview_text,
-                on_final_text,
-                on_complete,
-                on_error,
-                sample_rate=16000,
-            )
-        except Exception as exc:
-            self.audio_recorder.reset_streaming_state(reason=f"豆包流式运行异常: {exc}")
-            self.keyboard_manager.reset_state()
-            raise
-
-    def stop_doubao_streaming(self):
-        logger.info("🛑 停止豆包流式转录...")
-        self.floating_preview.hide()
-        audio = self.audio_recorder.stop_streaming_recording()
-        audio_bytes = self._buffer_to_bytes(audio)
-        if audio_bytes:
-            self._current_streaming_archive_path = self._archive_audio_bytes(
-                audio_bytes
-            )
-
-    def reset_state(self):
-        self.keyboard_manager.reset_state()
-
-    def run(self):
-        logger.info(f"=== 语音助手已启动 (v{__version__}) ===")
-        keyboard_thread = threading.Thread(
-            target=self.keyboard_manager.start_listening,
-            name="keyboard-listener",
-            daemon=True,
-        )
-        keyboard_thread.start()
-        self.status_controller.start()
-
-
-    def start_wenet_streaming(self):
-        if self.wenet_processor is None or not self.wenet_processor.is_available():
-            logger.warning("WeNet 不可用，回退到 OpenAI 模式")
-            self.start_openai_recording()
-            return
+        # 设置 WeNet 录音时长限制为 10 分钟
+        self.audio_recorder.max_record_duration = 600.0
+        
+        # 设置 WeNet 录音时长限制为 10 分钟
+        self.audio_recorder.max_record_duration = 600.0
         
         error = self.audio_recorder.start_streaming_recording()
         if error:
@@ -732,6 +632,44 @@ class VoiceAssistant:
             self.keyboard_manager.reset_state()
             raise
 
+    def start_wenet_streaming(self):
+        if self.wenet_processor is None or not self.wenet_processor.is_available():
+            logger.warning("WeNet 不可用，回退到 OpenAI 模式")
+            self.start_openai_recording()
+            return
+        
+        # 设置 WeNet 录音时长限制为 10 分钟
+        self.audio_recorder.max_record_duration = 600.0
+        
+        error = self.audio_recorder.start_streaming_recording()
+        if error:
+            logger.error(f"启动流式录音失败: {error}")
+            self.keyboard_manager.reset_state()
+            return
+        
+        self._current_streaming_archive_path = None
+        self._current_state = InputState.WENET_STREAMING
+        self._notify_status()
+        
+        def run_streaming():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            self._streaming_loop = loop
+            try:
+                loop.run_until_complete(self._run_wenet_streaming())
+            except Exception as e:
+                logger.error(f"WeNet 流式转录异常: {e}", exc_info=True)
+            finally:
+                loop.close()
+                self._streaming_loop = None
+        
+        self._streaming_thread = threading.Thread(
+            target=run_streaming,
+            name="wenet-streaming",
+            daemon=True,
+        )
+        self._streaming_thread.start()
+
     def stop_wenet_streaming(self):
         logger.info("🛑 停止 WeNet 流式转录...")
         self.floating_preview.hide()
@@ -739,6 +677,19 @@ class VoiceAssistant:
         audio_bytes = self._buffer_to_bytes(audio)
         if audio_bytes:
             self._current_streaming_archive_path = self._archive_audio_bytes(audio_bytes)
+
+    def reset_state(self):
+        self.keyboard_manager.reset_state()
+
+    def run(self):
+        logger.info(f"=== 语音助手已启动 (v{__version__}) ===")
+        keyboard_thread = threading.Thread(
+            target=self.keyboard_manager.start_listening,
+            name="keyboard-listener",
+            daemon=True,
+        )
+        keyboard_thread.start()
+        self.status_controller.start()
 
 
 def main():
@@ -850,95 +801,6 @@ def main():
             logger.error(f"发生错误: {error_msg}", exc_info=True)
             sys.exit(1)
 
-
-    def start_wenet_streaming(self):
-        if self.wenet_processor is None or not self.wenet_processor.is_available():
-            logger.warning("WeNet 不可用，回退到 OpenAI 模式")
-            self.start_openai_recording()
-            return
-        
-        error = self.audio_recorder.start_streaming_recording()
-        if error:
-            logger.error(f"启动流式录音失败: {error}")
-            self.keyboard_manager.reset_state()
-            return
-        
-        self._current_streaming_archive_path = None
-        self._current_state = InputState.WENET_STREAMING
-        self._notify_status()
-        
-        def run_streaming():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            self._streaming_loop = loop
-            try:
-                loop.run_until_complete(self._run_wenet_streaming())
-            except Exception as e:
-                logger.error(f"WeNet 流式转录异常: {e}", exc_info=True)
-            finally:
-                loop.close()
-                self._streaming_loop = None
-        
-        self._streaming_thread = threading.Thread(
-            target=run_streaming,
-            name="wenet-streaming",
-            daemon=True,
-        )
-        self._streaming_thread.start()
-
-    async def _run_wenet_streaming(self):
-        """运行 WeNet 流式转录"""
-        logger.info("🎤 开始 WeNet 本地流式转录...")
-        self.floating_preview.show()
-        
-        def on_preview_text(text):
-            self.floating_preview.update_text(text)
-        
-        def on_final_text(text):
-            if text:
-                logger.info(f"[WeNet 最终输入] {text}")
-                self._save_transcription_cache(
-                    self._current_streaming_archive_path,
-                    text,
-                    service="wenet",
-                    model="u2pp_conformer",
-                    mode="transcriptions",
-                )
-                self.keyboard_manager.type_text(text, None)
-        
-        def on_complete():
-            logger.info("✅ WeNet 流式转录完成")
-            self.floating_preview.hide()
-            self.audio_recorder.stop_streaming_recording()
-            self.keyboard_manager.reset_state()
-        
-        def on_error(error):
-            logger.error(f"❌ WeNet 流式转录错误: {error}")
-            self.floating_preview.hide()
-            self.audio_recorder.reset_streaming_state(reason=f"WeNet 错误: {error}")
-            self.keyboard_manager.reset_state()
-        
-        try:
-            await self.wenet_processor.process_audio_stream(
-                self.audio_recorder.stream_audio_chunks(target_sample_rate=16000),
-                on_preview_text,
-                on_final_text,
-                on_complete,
-                on_error,
-                sample_rate=16000,
-            )
-        except Exception as exc:
-            self.audio_recorder.reset_streaming_state(reason=f"WeNet 运行异常: {exc}")
-            self.keyboard_manager.reset_state()
-            raise
-
-    def stop_wenet_streaming(self):
-        logger.info("🛑 停止 WeNet 流式转录...")
-        self.floating_preview.hide()
-        audio = self.audio_recorder.stop_streaming_recording()
-        audio_bytes = self._buffer_to_bytes(audio)
-        if audio_bytes:
-            self._current_streaming_archive_path = self._archive_audio_bytes(audio_bytes)
 
 if __name__ == "__main__":
     main()

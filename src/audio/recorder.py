@@ -587,6 +587,7 @@ class AudioRecorder:
             # 设置自动停止定时器
             self.auto_stop_timer = threading.Timer(self.max_record_duration, self._auto_stop_recording)
             self.auto_stop_timer.start()
+            logger.info(f"⏱️  已设置自动停止定时器: {self.max_record_duration/60:.1f}分钟后自动停止")
 
             return None  # 成功
 

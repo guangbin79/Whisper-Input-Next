@@ -107,6 +107,7 @@ class WeNetStreamingProcessor:
             }))
 
             final_text = ""
+            accumulated_text = ""
 
             # 启动发送任务
             async def sender():
@@ -120,7 +121,7 @@ class WeNetStreamingProcessor:
 
             # 启动接收任务
             async def receiver():
-                nonlocal final_text
+                nonlocal final_text, accumulated_text
                 while True:
                     try:
                         raw_res = await asyncio.wait_for(
@@ -136,24 +137,32 @@ class WeNetStreamingProcessor:
                                 if nbest_list and len(nbest_list) > 0:
                                     text = nbest_list[0].get('sentence', '')
                                     if data.get('type') == 'partial_result':
-                                        on_preview_text(text)
+                                        on_preview_text(accumulated_text + text)
                                     else:
-                                        final_text = text
-                                        on_preview_text(text)
+                                        accumulated_text += text
+                                        final_text = accumulated_text
+                                        on_preview_text(accumulated_text)
                             except json.JSONDecodeError:
                                 pass
 
-                        # 检查是否结束
-                        if data.get('type') == 'final_result':
-                            break
+                        # 检查是否结束（发送方已完成）
+                        # 注意：在 continuous_decoding 模式下，final_result 只是端点检测
+                        # 不表示整个录音结束，所以不在这里 break
+                        # 只有在连接关闭时才退出
 
                     except asyncio.TimeoutError:
+                        # 检查发送方是否已完成
+                        if sender_task.done():
+                            break
                         continue
                     except websockets.exceptions.ConnectionClosed:
                         break
 
+            # 启动发送任务并保存引用
+            sender_task = asyncio.create_task(sender())
+
             # 并行执行发送和接收
-            await asyncio.gather(sender(), receiver())
+            await asyncio.gather(sender_task, receiver())
 
             # 输出最终文本
             if final_text:
