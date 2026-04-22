@@ -481,9 +481,30 @@ class KeyboardManager:
                 logger.info("⏹️ 停止录音（豆包流式识别模式）")
                 self.on_record_stop()
 
+    def cancel_recording(self):
+        if not self.is_recording:
+            return
+        
+        logger.info("🚫 取消录音")
+        
+        self._cancelled = True
+        self.is_recording = False
+        
+        if self.on_record_stop:
+            self.on_record_stop()
+        
+        self.reset_state()
+        
+        self.show_warning("录音已取消")
+
     def on_press(self, key):
         """按键按下时的回调"""
         try:
+            if key == Key.esc and self.is_recording:
+                logger.info("⏹️ 用户取消录音")
+                self.cancel_recording()
+                return
+
             # Hold按钮：单键按住即开始录音
             if self._hold_button and key == self._hold_button:
                 self._hold_pressed = True
@@ -527,7 +548,10 @@ class KeyboardManager:
     def on_release(self, key):
         """按键释放时的回调"""
         try:
-            # Hold按钮释放：停止录音
+            if hasattr(self, '_cancelled') and self._cancelled:
+                self._cancelled = False
+                return
+
             if self._hold_button and key == self._hold_button:
                 self._hold_pressed = False
                 self.stop_recording()
