@@ -1,7 +1,7 @@
-# Whisper-Input-Next - Enhanced Voice Transcription Tool
+# Whisper-Input-Next for Ubuntu 22.04
 
 <p align="center">
-  <img src="docs/whisper_claudecode.png" alt="Project Poster" />
+  <img src="docs/whisper_claudecode.png" alt="Project Poster" width="600"/>
 </p>
 
 <p align="center">
@@ -14,381 +14,278 @@
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License" />
   </a>
-  <a href="docs/README_zh-CN.md">
-    <img src="https://img.shields.io/badge/docs-中文文档-red.svg" alt="Chinese Documentation" />
+  <a href="https://ubuntu.com/">
+    <img src="https://img.shields.io/badge/Ubuntu-22.04%20LTS-orange.svg" alt="Ubuntu 22.04" />
+  </a>
+  <a href="#offline-asr">
+    <img src="https://img.shields.io/badge/ASR-WeNet%20Offline-brightgreen.svg" alt="WeNet Offline ASR" />
   </a>
 </p>
 
-An intelligent voice transcription input tool supporting multiple transcription services and high-quality speech recognition features.
+**Whisper-Input-Next 的 Ubuntu 22.04 适配版本**，基于离线 WeNet ASR 引擎，无需网络、无需 API Key、无需付费，按下快捷键即可语音输入文字到任意光标位置。
 
-## 💰 Why Pay $12/Month? Use Open Source Instead!
+> 本项目 fork 自 [Mor-Li/Whisper-Input-Next](https://github.com/Mor-Li/Whisper-Input-Next)，针对 **Ubuntu 22.04 LTS** 进行了深度适配，并默认采用 **WeNet 离线流式 ASR**，实现完全本地化的中文语音识别。
 
-**Typeless charges $12/month** for their voice keyboard, but you know what? This open-source project does the same thing for **FREE** - you only pay for the underlying API costs (Doubao ASR or OpenAI GPT-4o transcribe), which is incredibly cheap compared to Typeless's subscription.
+---
 
-- Typeless: $144/year subscription + you don't own the service
-- **Whisper-Input-Next**: $0 + only pay for what you use (Doubao streaming ASR is super cheap!)
+## 为什么选择这个版本？
 
-Stop renting your tools. Own them.
+| 特性 | 本版本 (WeNet Offline) | 原版 (Doubao/OpenAI) |
+|------|------------------------|----------------------|
+| **网络依赖** | 完全离线，无需网络 | 需要联网调用云端 API |
+| **费用** | 永久免费，零 API 费用 | 按量计费或订阅 |
+| **隐私** | 语音数据不上传，本地处理 | 音频上传至第三方服务器 |
+| **部署复杂度** | 一键 Docker 启动 WeNet 服务 | 需申请 API Key、配置密钥 |
+| **识别延迟** | 本地实时流式，低延迟 | 受网络状况影响 |
+| **适用场景** | 内网环境、隐私敏感、长期运行 | 有稳定外网、追求极致准确率 |
 
-## 🚀 Project Background
+---
 
-This project is based on [ErlichLiu/Whisper-Input](https://github.com/ErlichLiu/Whisper-Input) for secondary development. The original project has been inactive for months, so we have made extensive feature expansions and architectural optimizations, adding important features like OpenAI GPT-4o transcribe integration, audio archiving, local whisper support, and more. [Why use this project?](./docs/[V3.0.0]_知乎blog.md)
+## 核心特性
 
-## ✨ Key Features
+### 完全离线的中文语音识别
+- **WeNet 流式 ASR**：基于 Conformer 架构，针对中文优化，支持实时流式识别
+- **零网络依赖**：所有语音数据本地处理，适合内网、隐私敏感场景
+- **零成本**：无需申请任何 API Key，无后续费用
+- **Docker 一键部署**：WeNet 服务通过 Docker 容器运行，启动即用
 
-### 🔥 NEW in v3.3.0: Two-Pass Recognition & Accuracy Boost
-- **Two-Pass Recognition**: Enables `enable_nonstream` for sentence-level re-recognition using the higher-accuracy nostream model during speech pauses, significantly improving transcription quality
-- **Deferred Text Output**: All text stays in floating preview during recording; final text is pasted only after recording stops, allowing full ASR context optimization
-- **DJI Wireless Mic Support**: Auto-detects and prioritizes DJI Wireless Microphone as input device
+### Ubuntu 22.04 深度适配
+- **原生 Linux 支持**：修复 macOS 专属依赖（AppKit、PyObjC），替换为 Linux 兼容实现
+- **PyQt5 浮动预览**：实时显示识别结果，类似输入法候选框
+- **终端状态栏**：简洁的状态指示（录音中/识别中/完成）
+- **xdotool 自动输入**：识别结果自动输入到当前光标位置
 
-### Doubao Streaming ASR (since v3.2.0)
-- **Real-time Streaming Transcription**: Powered by ByteDance's Doubao Seed ASR 2.0, transcription appears as you speak
-- **Floating Preview Window**: Shows pending text in real-time near your input field, like an IME
-- **Now Default for Ctrl+F**: The best voice input experience, set as default (configurable)
-- 👉 [How to get your API keys](#how-to-get-doubao-api-keys)
+### 快捷键操作
+- **`Ctrl + F`**：按住开始录音，松开结束并识别（WeNet 离线流式 ASR）
+- **`Ctrl + I`**：本地 whisper.cpp 模式（需额外安装，见下方可选配置）
 
-### WeNet Local Offline ASR (NEW)
-- **Fully Offline**: No network connection required, complete privacy protection
-- **Chinese Optimized**: Based on Conformer architecture, optimized for Chinese speech recognition
-- **Real-time Streaming**: Real-time transcription as you speak, similar experience to Doubao
-- **Zero Cost**: No API fees, completely free
-- **Local Deployment**: Data never leaves your machine, maximum security
-- 👉 [How to use WeNet](#how-to-use-wenet-local-asr)
+### 其他功能
+- **音频存档**：自动保存录音文件，支持历史回放
+- **智能重试**：识别失败自动重试，无需重新录音
+- **状态指示**：简洁数字状态（0=录音中, 1=识别中, !=错误）
 
-### 🎯 Core Functions
-- **Multi-platform Transcription Services**: Doubao Streaming ASR (default), OpenAI GPT-4o transcribe, local whisper.cpp
-- **Smart Hotkeys**: Ctrl+F (Doubao streaming, default) / Ctrl+I (local cost-saving mode)
-- **Audio Archive**: Automatically save all recordings, support history playback
-- **Failure Retry**: Intelligent error handling and retry mechanism
+---
 
-### 🔧 Technical Features
-- **Dual Processor Architecture**: Streaming + Batch processors working simultaneously
-- **180s Long Audio Support**: Support up to 3 minutes of continuous recording
-- **Smart Status Indicators**: Simple numeric status display (0, 1, !)
-- **Cache System**: Audio archive with transcription result caching
+## 系统要求
 
-### 🌟 User Experience
-- **No Clipboard Pollution**: Clean status display without interfering with system clipboard
-- **One-click Retry**: Failed transcriptions can be retried without re-recording
-- **Real-time Input**: Transcription results appear directly at cursor position
-- **Privacy Protection**: Local processing option, data not uploaded
+- **操作系统**：Ubuntu 22.04 LTS (Jammy)
+- **Python**：3.12+
+- **硬件**：
+  - CPU：4 核及以上（WeNet ASR 推理占用）
+  - 内存：4GB+
+  - 磁盘：2GB+（含 Docker 镜像和模型）
+- **其他**：
+  - 麦克风设备
+  - Docker & Docker Compose（用于运行 WeNet 服务）
+  - sudo 权限
 
-## 📦 Quick Start
+---
 
-### Environment Requirements
-- Python 3.12+
-- macOS/Linux (Windows support in development)
-- Network connection (only required for cloud services)
-- **Local whisper.cpp** (required when using local transcription features)
+## 快速开始
 
-### Installation Steps
+### 1. 安装系统依赖
 
-1. **Clone Project**
 ```bash
-git clone https://github.com/Mor-Li/Whisper-Input-Next.git
-cd Whisper-Input-Next
+sudo apt update
+sudo apt install -y \
+  git xdotool xclip pulseaudio-utils \
+  libportaudio2 libportaudiocpp0 portaudio19-dev \
+  python3-xlib libx11-dev libxtst-dev \
+  docker.io docker-compose
 ```
 
-2. **Create Virtual Environment**
+> **依赖说明**：
+> - `xdotool`：模拟键盘输入，将识别文字输入到光标处
+> - `portaudio`：音频采集底层库
+> - `python3-xlib`, `libxtst-dev`：全局热键监听
+> - `docker.io`：运行 WeNet ASR 服务容器
+
+### 2. 安装 Python 3.12
+
+Ubuntu 22.04 默认 Python 3.10，需通过 deadsnakes PPA 安装 3.12：
+
 ```bash
-python -m .venv .venv
-source .venv/bin/activate  # macOS/Linux
-# or .venv\\Scripts\\activate  # Windows
+sudo apt install -y software-properties-common
+sudo add-apt-repository -y ppa:deadsnakes/ppa
+sudo apt update
+sudo apt install -y python3.12 python3.12-venv python3.12-dev
 ```
 
-3. **Install Dependencies**
+### 3. 克隆仓库
+
 ```bash
-pip install -r requirements.txt
+git clone https://github.com/YOUR_USERNAME/Whisper-Input-Next-Ubuntu.git ~/Whisper-Input-Next
+cd ~/Whisper-Input-Next
 ```
 
-4. **Install Local whisper.cpp (Optional, required for local transcription)**
+### 4. 创建虚拟环境并安装依赖
+
 ```bash
-# Clone whisper.cpp repository
-git clone https://github.com/ggerganov/whisper.cpp.git
-cd whisper.cpp
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip setuptools wheel
+pip install -r requirements-linux.txt
+```
 
-# Compile (macOS/Linux)
-make
+### 5. 下载 WeNet 模型并启动服务
 
-# Download model file (recommend large-v3)
-bash ./models/download-ggml-model.sh large-v3
-
-# Record whisper-cli path for later configuration in .env file
-echo "Whisper CLI Path: $(pwd)/build/bin/whisper-cli"
+```bash
+# 下载模型（约 300MB，仅需一次）
+git clone https://www.modelscope.cn/wenet/u2pp_conformer-asr-cn-16k-online.git
+cd u2pp_conformer-asr-cn-16k-online
+git lfs install && git lfs pull
 cd ..
+
+# 启动 WeNet Docker 服务
+./scripts/wenet_service.sh start
 ```
 
-5. **Configure Environment Variables**
+> 服务默认运行在 `ws://localhost:10086`，可通过 `docker ps` 查看容器状态。
+
+### 6. 配置环境变量
+
 ```bash
 cp env.example .env
-# Edit .env file, configure necessary parameters:
-# - OFFICIAL_OPENAI_API_KEY: OpenAI API key (required)
-# - WHISPER_CLI_PATH: whisper.cpp executable path (required for local transcription)
-# - WHISPER_MODEL_PATH: whisper model file path (required for local transcription)
 ```
 
-6. **Run Program**
-```bash
-python main.py
-# or use startup script
-chmod +x start.sh
-./start.sh
-```
-
-### ⚠️ Important Notes
-
-**Required Configuration:**
-- `OFFICIAL_OPENAI_API_KEY`: OpenAI GPT-4o transcribe API key
-- `WHISPER_CLI_PATH`: Local whisper.cpp executable absolute path
-- `WHISPER_MODEL_PATH`: whisper model file path (relative to whisper.cpp root directory)
-
-**whisper.cpp Installation Guide:**
-1. Clone and compile from [whisper.cpp repository](https://github.com/ggerganov/whisper.cpp)
-2. Download large-v3 model: `bash ./models/download-ggml-model.sh large-v3`
-3. Configure correct paths in .env
-
-## ⚙️ Configuration Guide
-
-### Environment Variable Configuration
-
-Configure the following parameters in the `.env` file:
+编辑 `.env` 文件，确保以下配置：
 
 ```bash
-# ============ Doubao Streaming ASR (Recommended, Default) ============
-# Get your API keys from Volcengine Console (see screenshot below)
-DOUBAO_APP_KEY=your_app_id_here        # APP ID from console
-DOUBAO_ACCESS_KEY=your_access_token_here  # Access Token from console
+# 启用 WeNet 离线 ASR
+WENET_ENABLED=true
+TRANSCRIPTION_SERVICE=wenet
 
-# Transcription service selection: "doubao" (default, streaming) or "openai" (batch)
-TRANSCRIPTION_SERVICE=doubao
+# 系统平台设为 linux
+SYSTEM_PLATFORM=linux
 
-# ============ OpenAI Configuration (Optional, for batch mode) ============
-OFFICIAL_OPENAI_API_KEY=sk-proj-xxx
-
-# ============ Local whisper.cpp (Optional, for Ctrl+I) ============
-WHISPER_CLI_PATH=/path/to/whisper.cpp/build/bin/whisper-cli
-WHISPER_MODEL_PATH=models/ggml-large-v3.bin
-
-# ============ Keyboard & System Configuration ============
+# 快捷键配置
 TRANSCRIPTIONS_BUTTON=f
 TRANSLATIONS_BUTTON=ctrl
-SYSTEM_PLATFORM=mac  # mac/win
 
-# Feature switches
+# 功能开关
 CONVERT_TO_SIMPLIFIED=false
 ADD_SYMBOL=false
 OPTIMIZE_RESULT=false
 ```
 
-<a id="how-to-use-wenet-local-asr"></a>
-**How to use WeNet Local ASR**:
+### 7. 权限配置（重要）
 
-1. **Download WeNet Model** (one-time setup):
-   ```bash
-   git clone https://www.modelscope.cn/wenet/u2pp_conformer-asr-cn-16k-online.git
-   cd u2pp_conformer-asr-cn-16k-online
-   git lfs install
-   git lfs pull
-   cd ..
-   ```
-
-2. **Start WeNet Service**:
-   ```bash
-   ./scripts/wenet_service.sh start
-   ```
-   Or manually with Docker:
-   ```bash
-   docker run -d \
-     --name hx_asr_cpu \
-     --restart unless-stopped \
-     --cpus="4" \
-     -e OMP_NUM_THREADS=4 \
-     -p 10086:10086 \
-     -v $(pwd)/u2pp_conformer-asr-cn-16k-online:/mnt/model \
-     wenetorg/wenet:latest \
-     /home/wenet/runtime/libtorch/build/bin/websocket_server_main \
-       --port 10086 \
-       --chunk_size 16 \
-       --model_path /mnt/model/final.zip \
-       --unit_path /mnt/model/units.txt
-   ```
-
-3. **Configure Environment Variables** (in `.env` file):
-   ```bash
-   WENET_ENABLED=true
-   TRANSCRIPTION_SERVICE=wenet
-   ```
-
-4. **Run the Application**:
-   ```bash
-   ./start.sh
-   ```
-
-5. **Use Ctrl+F** to trigger WeNet local streaming recognition
-
-**Notes**:
-- WeNet service requires Docker to be installed and running
-- Model download is approximately 300MB
-- CPU usage is high (recommend 4+ cores)
-- Recognition accuracy may be slightly lower than cloud services (Doubao, OpenAI)
-- Docker container takes a few seconds to start
-
-<a id="how-to-get-doubao-api-keys"></a>
-**How to get Doubao API keys**:
-
-1. Go to [Volcengine Console - Speech Recognition](https://console.volcengine.com/ark/region:ark+cn-beijing/tts/speechRecognition)
-2. Find your **APP ID** and **Access Token** in the "服务接口认证信息" section (see screenshot below)
-
-<p align="center">
-  <img src="assets/images/volcengine_doubao_api_keys.png" alt="Volcengine Doubao API Keys" width="800" />
-</p>
-
-**Important Notes**:
-- **Doubao Streaming ASR** is now the default and recommended transcription service
-- Set `TRANSCRIPTION_SERVICE=openai` to use OpenAI batch mode instead
-
-### Quick Start with Aliases (Recommended)
-
-Add these aliases to your shell profile (`~/.bashrc`, `~/.zshrc`, etc.):
+全局热键监听需要 `input` 用户组权限：
 
 ```bash
-alias whisper_input='cd /path/to/Whisper-Input-Next && ./start.sh'
-alias whisper_input_off='tmux kill-session -t whisper-input'
+sudo usermod -aG input $USER
+# 重新登录后生效
 ```
 
-Replace `/path/to/Whisper-Input-Next` with your actual project path.
-
-### Hotkey Instructions
-
-| Hotkey | Function | Service | Features |
-|--------|----------|---------|-----------|
-| `Ctrl+F` | **Real-time streaming transcription** | Doubao Seed ASR 2.0 (default) | Ultra-low latency, floating preview, text appears as you speak |
-| `Ctrl+I` | Local transcription | whisper.cpp | Offline processing, privacy protection |
-
-> **Note**: Set `TRANSCRIPTION_SERVICE=openai` in `.env` to use OpenAI GPT-4o transcribe instead of Doubao for Ctrl+F.
-
-### Status Indicators
-
-The program displays concise status indicators at the cursor position during runtime:
-
-| Status | Meaning | Action |
-|--------|---------|--------|
-| `0` | Recording | Press hotkey again to stop recording |
-| `1` | Transcribing | Please wait for transcription to complete |
-| `!` | Transcription failed/error | Press `Ctrl+F` again to retry (audio saved) |
-
-**Design Optimizations**:
-- Use concise numeric status, avoid complex emoji symbols
-- No system clipboard pollution, display only at cursor position
-- Clear and intuitive status, easy to quickly identify
-
-**Retry Mechanism Instructions**:
-- When transcription fails, the system saves the recording and displays `!` status
-- No need to re-record, simply press `Ctrl+F` to retry
-- Retry uses previously saved audio until transcription succeeds
-
-## 📚 Feature Documentation
-
-- [🔊 Audio Archive Feature](./docs/[V3.0.0]_AUDIO_ARCHIVE_FEATURE.md) - *Introduced in v3.0.0*
-- [🤖 Kimi Polish Integration](./docs/[DEPRECATED]_KIMI_USAGE.md) - *Deprecated*
-- [📊 Status Display Improvements](./docs/[V3.0.0]_STATUS_DISPLAY_IMPROVEMENTS.md) - *Introduced in v3.0.0*
-- [🔄 Branch Differences Comparison](./docs/[V3.0.0]_BRANCH_DIFFERENCES.md) - *Introduced in v3.0.0*
-- [📋 Version Control Documentation](./docs/[V3.0.0]_VERSION_CONTROL.md) - *Established in v3.0.0*
-
-## 🛠️ Development Status
-
-### ✅ Completed Features
-- [x] **Two-pass recognition for higher accuracy** *(NEW in v3.3.0)*
-- [x] **Deferred text output with full-context optimization** *(NEW in v3.3.0)*
-- [x] **DJI Wireless Mic auto-detection** *(NEW in v3.3.0)*
-- [x] **Doubao Streaming ASR integration** *(v3.2.0)*
-- [x] **Floating preview window for real-time feedback** *(v3.2.0)*
-- [x] OpenAI GPT-4o transcribe integration
-- [x] Audio archive system
-- [x] Local whisper support
-- [x] Dual processor architecture
-- [x] Smart retry mechanism
-- [x] Project documentation improvement
-- [x] 10-minute recording limit protection
-- [x] Status indicator delay optimization
-- [x] Audio format conversion support (m4a to wav)
-- [x] Bilingual documentation system
-- [x] GPT-4o terminology standardization
-
-### 🚧 In Development  
-*No features currently in development*
-
-### 📋 Planned Features
-*No features currently planned*
-
-### 🧪 Experimental Features History
-
-#### iOS Keyboard Extension Experiment (August 14, 2025)
-**Status**: ❌ Discontinued due to Apple's restrictions  
-Attempted to create iOS keyboard extension but discovered that even Sogou Input Method cannot directly record audio in keyboard extensions due to Apple's system limitations. iOS voice input is currently not feasible as a seamless keyboard extension.
-
-## 🤝 Contributing Guidelines
-
-We welcome all forms of contributions! Whether it's:
-
-- 🐛 **Bug Reports**: Found an issue? [Create an Issue](https://github.com/Mor-Li/Whisper-Input-Next/issues)
-- 💡 **Feature Suggestions**: Have great ideas? [Start a Discussion](https://github.com/Mor-Li/Whisper-Input-Next/discussions)
-- 📝 **Code Contributions**: Submit Pull Requests
-- 📚 **Documentation Improvements**: Help improve documentation
-- 🌍 **Translations**: Help translate to more languages
-
-### Development Environment Setup
+### 8. 启动程序
 
 ```bash
-# Clone repository
-git clone https://github.com/Mor-Li/Whisper-Input-Next.git
-cd Whisper-Input-Next
-
-# Create development environment
-python -m venv .venv
-source .venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Start development
+# 前台运行（调试用）
 python main.py
+
+# 后台运行（推荐日常使用）
+./start.sh
 ```
-
-## 🙏 Acknowledgments
-
-- Thanks to [ErlichLiu/Whisper-Input](https://github.com/ErlichLiu/Whisper-Input) for the original project foundation
-- Thanks to [ByteDance/Volcengine](https://www.volcengine.com/) for the excellent Doubao Seed ASR 2.0 streaming API
-- Thanks to OpenAI for providing excellent transcription API services
-- Thanks to [whisper.cpp](https://github.com/ggerganov/whisper.cpp) community for local processing support
-- Thanks to all contributors and users for their support
-
-## 📞 Contact Information
-
-- **Project Address**: https://github.com/Mor-Li/Whisper-Input-Next  
-- **Issue Reports**: [Issues](https://github.com/Mor-Li/Whisper-Input-Next/issues)
-- **Feature Suggestions**: [Discussions](https://github.com/Mor-Li/Whisper-Input-Next/discussions)
-
-## 📋 Changelog
-
-### v3.3.0 (2026-03-11)
-- **Two-pass recognition**: Enable `enable_nonstream` for sentence-level re-recognition with nostream model, significantly improving accuracy (e.g. "广告位" → "光标位置")
-- **Deferred text output**: All text stays in floating preview during recording; final text pasted only after stop, allowing full ASR context optimization
-- **DJI Wireless Mic support**: Auto-detect and prioritize DJI Wireless Microphone as highest priority input device
-- **Lower latency**: Reduce streaming chunk size from 200ms to 100ms
-- **Faster streaming**: Remove artificial delays in audio packet sending
-
-### v3.2.0 (2025-07-27)
-- **Doubao Streaming ASR**: Real-time streaming transcription powered by ByteDance Seed ASR 2.0
-- **Floating preview window**: Shows pending text in real-time near input field
-- **Auto audio device switching**: Priority-based microphone selection
-
-### v3.0.0
-- OpenAI GPT-4o transcribe integration
-- Audio archive system
-- Local whisper.cpp support
-- Dual processor architecture
 
 ---
 
-**⭐ If this project helps you, please give it a Star for support!**
+## 使用方式
+
+1. 确保 WeNet Docker 服务正在运行：`docker ps | grep hx_asr_cpu`
+2. 确保 Whisper-Input-Next 程序已启动（前台或后台）
+3. 将光标置于任意输入框（终端、浏览器、文档编辑器等）
+4. 按下 **`Ctrl + F`** 开始录音，松开结束
+5. 识别结果自动输入到光标位置
+
+---
+
+## 可选配置
+
+### 使用本地 whisper.cpp（完全离线备选）
+
+如需完全不依赖 Docker 的离线方案，可配置 whisper.cpp：
+
+```bash
+# 1. 安装 whisper.cpp
+git clone https://github.com/ggerganov/whisper.cpp.git
+cd whisper.cpp
+make
+bash ./models/download-ggml-model.sh large-v3
+cd ..
+
+# 2. 在 .env 中配置路径
+WHISPER_CLI_PATH=/path/to/whisper.cpp/build/bin/whisper-cli
+WHISPER_MODEL_PATH=models/ggml-large-v3.bin
+```
+
+### 使用豆包流式 ASR（需要网络）
+
+如需更高准确率且可接受联网，可切换至豆包 ASR：
+
+```bash
+# 在 .env 中配置
+doUBAO_APP_KEY=your_app_id
+DOUBAO_ACCESS_KEY=your_access_token
+TRANSCRIPTION_SERVICE=doubao
+```
+
+获取 API Key：[火山引擎控制台 - 语音识别](https://console.volcengine.com/ark/region:ark+cn-beijing/tts/speechRecognition)
+
+---
+
+## 故障排除
+
+| 问题 | 解决方案 |
+|------|----------|
+| `PortAudio library not found` | `sudo apt install libportaudio2 portaudio19-dev` |
+| `Ctrl+F` 无响应 | 确认已执行 `sudo usermod -aG input $USER` 并重新登录 |
+| WeNet 连接失败 | 检查 Docker 容器：`docker logs hx_asr_cpu` |
+| 音频设备未检测到 | 检查 pulseaudio：`pulseaudio --check && echo OK` |
+| PyQt5 浮动窗口不显示 | 确认 DISPLAY 环境变量：`echo $DISPLAY`，图形界面需运行 |
+| 识别准确率低 | WeNet 模型对中文优化，英文识别较弱；嘈杂环境建议靠近麦克风 |
+
+---
+
+## 项目结构
+
+```
+~/Whisper-Input-Next/
+├── .env                          # 环境变量配置
+├── .venv/                        # Python 3.12 虚拟环境
+├── main.py                       # 程序入口
+├── start.sh                      # 后台启动脚本（tmux）
+├── requirements-linux.txt        # Linux 依赖（无 macOS 专用包）
+├── INSTALL_UBUNTU_2204.md        # 详细安装指南（含代码修改说明）
+├── WeNet.md                      # WeNet 服务部署说明
+├── u2pp_conformer-asr-cn-16k-online/  # WeNet 模型文件
+├── scripts/
+│   └── wenet_service.sh          # WeNet Docker 服务管理脚本
+└── src/
+    ├── keyboard/
+    │   └── listener.py           # 全局热键监听（已适配 Linux）
+    ├── transcription/
+    │   ├── doubao_streaming.py   # 豆包流式 ASR
+    │   └── wenet_streaming.py    # WeNet 流式 ASR
+    └── ui/
+        ├── status_bar.py         # Linux 终端状态栏
+        └── floating_preview.py   # Linux PyQt5 浮动预览窗口
+```
+
+---
+
+## 致谢
+
+- 原项目：[Mor-Li/Whisper-Input-Next](https://github.com/Mor-Li/Whisper-Input-Next)
+- 原始项目：[ErlichLiu/Whisper-Input](https://github.com/ErlichLiu/Whisper-Input)
+- ASR 引擎：[WeNet](https://github.com/wenet-e2e/wenet)
+- 模型来源：[ModelScope - u2pp_conformer-asr-cn-16k-online](https://www.modelscope.cn/wenet/u2pp_conformer-asr-cn-16k-online)
+
+---
+
+## 许可证
+
+MIT License
+
+---
+
+**如果本项目对你有帮助，请给原项目 [Whisper-Input-Next](https://github.com/Mor-Li/Whisper-Input-Next) 点个 Star！**
