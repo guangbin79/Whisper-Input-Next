@@ -72,30 +72,43 @@ class KeyboardManager:
         
 
         # 获取转录和翻译按钮
-        transcriptions_button = os.getenv("TRANSCRIPTIONS_BUTTON")
-        try:
-            # 字符键（如f）直接使用字符串，特殊键使用Key枚举
-            if len(transcriptions_button) == 1 and transcriptions_button.isalpha():
-                self.transcriptions_button = transcriptions_button
-            else:
-                self.transcriptions_button = Key[transcriptions_button]
-            logger.info(f"配置到转录按钮：{transcriptions_button}")
-        except KeyError:
-            logger.error(f"无效的转录按钮配置：{transcriptions_button}")
+        transcriptions_button = os.getenv("TRANSCRIPTIONS_BUTTON", "").strip()
+        if transcriptions_button:
+            try:
+                # 字符键（如f）直接使用字符串，特殊键使用Key枚举
+                if len(transcriptions_button) == 1 and transcriptions_button.isalpha():
+                    self.transcriptions_button = transcriptions_button
+                else:
+                    self.transcriptions_button = Key[transcriptions_button]
+                logger.info(f"配置到转录按钮：{transcriptions_button}")
+            except KeyError:
+                logger.error(f"无效的转录按钮配置：{transcriptions_button}")
+                self.transcriptions_button = None
+        else:
+            self.transcriptions_button = None
+            logger.info("转录按钮未配置，组合键模式已禁用")
 
-        translations_button = os.getenv("TRANSLATIONS_BUTTON")
-        try:
-            # 字符键（如f）直接使用字符串，特殊键使用Key枚举
-            if len(translations_button) == 1 and translations_button.isalpha():
-                self.translations_button = translations_button
-            else:
-                self.translations_button = Key[translations_button]
-            logger.info(f"配置到翻译按钮(与转录按钮组合)：{translations_button}")
-        except KeyError:
-            logger.error(f"无效的翻译按钮配置：{translations_button}")
+        translations_button = os.getenv("TRANSLATIONS_BUTTON", "").strip()
+        if translations_button:
+            try:
+                # 字符键（如f）直接使用字符串，特殊键使用Key枚举
+                if len(translations_button) == 1 and translations_button.isalpha():
+                    self.translations_button = translations_button
+                else:
+                    self.translations_button = Key[translations_button]
+                logger.info(f"配置到翻译按钮(与转录按钮组合)：{translations_button}")
+            except KeyError:
+                logger.error(f"无效的翻译按钮配置：{translations_button}")
+                self.translations_button = None
+        else:
+            self.translations_button = None
+            logger.info("翻译按钮未配置，组合键模式已禁用")
 
-        logger.info(f"按住 {translations_button} + {transcriptions_button} 键：按住录音，松开转录（OpenAI GPT-4o transcribe 模式）")
-        logger.info(f"按住 {translations_button} + I 键：按住录音，松开转录（本地 Whisper 模式）")
+        if self.transcriptions_button and self.translations_button:
+            logger.info(f"按住 {translations_button} + {transcriptions_button} 键：按住录音，松开转录（OpenAI GPT-4o transcribe 模式）")
+            logger.info(f"按住 {translations_button} + I 键：按住录音，松开转录（本地 Whisper 模式）")
+        else:
+            logger.info("组合键未配置")
 
         # Hold按钮：单键按住录音，松开转录（如 alt_r）
         self._hold_button = None
@@ -511,6 +524,9 @@ class KeyboardManager:
                 self.start_recording()
                 return
 
+            if not self.transcriptions_button and not self.translations_button:
+                return
+
             # 检查转录按钮（字符键或特殊键）
             is_transcription_key = False
             if isinstance(self.transcriptions_button, str):
@@ -557,7 +573,9 @@ class KeyboardManager:
                 self.stop_recording()
                 return
 
-            # 检查转录按钮（字符键或特殊键）
+            if not self.transcriptions_button and not self.translations_button:
+                return
+
             is_transcription_key = False
             if isinstance(self.transcriptions_button, str):
                 is_transcription_key = hasattr(key, 'char') and key.char == self.transcriptions_button
